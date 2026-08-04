@@ -1,1 +1,2 @@
-console.log("test")
+import dotenv ,{config} from "dotenv"
+config()
