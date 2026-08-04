@@ -58,11 +58,13 @@ const userSchema = new mongoose.Schema({
         default: 0
 
     },
-    provider:{
-        type:String,
-        enum:["custom","google"]
+    provider: {
+        type: String,
+        enum: ["custom", "google"]
     }
-   
+    , profilePic: {
+        type: String,
+    }
 }, {
     timestamps: true
 })
