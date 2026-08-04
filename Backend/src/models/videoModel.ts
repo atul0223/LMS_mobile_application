@@ -20,4 +20,8 @@ const videoSchema = new mongoose.Schema({
         size:String,
         orderInCourse:Number
     }
+},{
+    timestamps:true
 })
+const Video = mongoose.model('Video',videoSchema)
+export default Video;
