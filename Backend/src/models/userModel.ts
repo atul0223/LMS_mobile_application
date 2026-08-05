@@ -15,6 +15,7 @@ const userSchema = new mongoose.Schema({
         trim: true,
         unique: true
     },
+    isVerified: Boolean,
     passwordSchema: {
         password: {
             type: String,
