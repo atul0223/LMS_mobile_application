@@ -1,4 +1,5 @@
 import jwt from "jsonwebtoken";
+import { access } from "node:fs";
 const generateJWT = (user, time) => {
   const userId =
     typeof user === "string" ? user : user?._id?.toString?.() || user?.toString?.();
@@ -9,6 +10,7 @@ const generateJWT = (user, time) => {
   return jwt.sign(
     {
       id: userId,
+  
     },
     process.env.JWT_SECRET,
     { expiresIn: time }
