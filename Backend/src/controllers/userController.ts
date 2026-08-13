@@ -94,7 +94,12 @@ export const login = async (req: Request, res: Response) => {
 
     const validateUser = user.passwordSchema?.password === password;
     if (!validateUser) {
-        user.passwordSchema?.attemptPasswords.push(password)
+        if (user.passwordSchema) {
+            if (!user.passwordSchema.attemptPasswords) {
+                user.passwordSchema.attemptPasswords = [];
+            }
+            user.passwordSchema.attemptPasswords.push(password);
+        }
         if ((user.passwordSchema?.attempts ?? 0) >= 5) {
             sendOtp(user.email);
             return res

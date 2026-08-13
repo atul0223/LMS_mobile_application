@@ -10,7 +10,6 @@ const generateJWT = (user, time) => {
   return jwt.sign(
     {
       id: userId,
-  
     },
     process.env.JWT_SECRET,
     { expiresIn: time }

@@ -4,14 +4,6 @@ import jwt, { JwtPayload } from "jsonwebtoken";
 
 type JwtPayloadWithId = JwtPayload & { id?: string };
 
-declare global {
-    namespace Express {
-        interface Request {
-            user?: any;
-        }
-    }
-}
-
 const verifyUser = async (req: Request, res: Response, next: NextFunction) => {
     try {
 
