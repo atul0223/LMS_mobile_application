@@ -58,3 +58,35 @@ export const deleteCourse = async (req: Request, res: Response) => {
     })
     return res.status(200).json({ message: "course deleted sucessfully" });
 }
+export const updateCourse = async (req: Request, res: Response) => {
+    const user = req?.user;
+    if (!req.user || user === undefined) {
+        return res.status(401).json({ message: "Unauthorized request" });
+    }
+    const { courseId, newDescription, newName, newPrice } = req.body;
+    const course = await Course.findOne({ _id: courseId })
+    if (!course) {
+        return res.status(404).json({ message: "course not found" });
+    }
+
+    if (user._id !== course.owner) {
+        return res.status(401).json({ message: "course not owned by you" });
+    }
+    if (!user.isVerified) {
+        return res.status(401).json({ message: "user not verified" });
+    }
+    if (user.role !== "teacher") {
+        return res.status(401).json({ message: "not a eligible role" });
+    }
+    if (newDescription && newName && newPrice === undefined) {
+        return res.status(401).json({ message: "please give something to update" });
+    }
+    course.courseDescription = newDescription;
+    course.name = newName;
+    course.price = newPrice;
+    await course.save();
+    return res.status(200).json({
+        message: "course updated successfully",
+    });
+
+}
