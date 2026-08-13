@@ -2,6 +2,7 @@ import mongoose, { Document } from 'mongoose';
 
 export interface ICourse {
     _id?: mongoose.Types.ObjectId | string;
+    owner:mongoose.Types.ObjectId;
     name: string;
     courseDescription?: string;
     price?: number;
@@ -14,6 +15,9 @@ export interface ICourse {
 export type CourseDocument = ICourse & Document;
 
 const courseSchema = new mongoose.Schema<ICourse>({
+    owner:{
+        type:mongoose.Types.ObjectId
+    },
     name: {
         type: String,
         required: true

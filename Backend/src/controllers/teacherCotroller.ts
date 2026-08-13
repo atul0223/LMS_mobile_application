@@ -20,9 +20,41 @@ export const createCourse = async (req: Request, res: Response) => {
         return res.status(401).json({ message: "not a eligible role" });
     }
     await Course.create({
+        owner: _id,
         name: courseName,
         courseDescription,
         price,
         backgroundPic
     })
+    return res.status(200).json({ message: "course created sucessfully" });
+}
+export const deleteCourse = async (req: Request, res: Response) => {
+    if (!req.user) {
+        return res.status(401).json({ message: "Unauthorized request" });
+    }
+    const { _id, role, isVerified } = req.user;
+    if (!isVerified) {
+        return res.status(401).json({ message: "user not verified" });
+    }
+    if (role !== "teacher") {
+        return res.status(401).json({ message: "not a eligible role" });
+    }
+    const { courseId } = req.body;
+    if (!courseId) {
+        return res.status(401).json({ message: "course id required" });
+    }
+    const course = await Course.findOne({ _id: courseId })
+    if (!course) {
+        return res.status(404).json({ message: "course not found" });
+    }
+
+    if (_id !== course.owner) {
+        return res.status(401).json({ message: "course not owned by you" });
+    }
+
+    await Course.deleteOne({
+        owner: _id,
+        _id: courseId
+    })
+    return res.status(200).json({ message: "course deleted sucessfully" });
 }
