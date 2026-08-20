@@ -1,6 +1,8 @@
 import express from 'express';
 import rateLimit from 'express-rate-limit';
 import userRouter from './routes/userRouter.ts';
+import studentRouter from './routes/studentRouter.ts';
+import teacherRouter from './routes/teacherRouter.ts';
 
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -21,6 +23,8 @@ app.use(express.json({ limit: "20kb" }));
 
 // Routes
 app.use("/user", userRouter);
+app.use("/student", studentRouter);
+app.use("/teacher", teacherRouter);
 app.get("/health", (req, res) => res.status(200).json({ status: "ok" }));
 
 // 404 Handler
