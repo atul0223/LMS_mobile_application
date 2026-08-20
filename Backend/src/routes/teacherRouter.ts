@@ -4,14 +4,15 @@ import {
     createCourse,
     deleteCourse,
     updateCourse,
-    getTeacherCourses
+    getTeacherCourses,
+    toggleBlockStudent
 } from "../controllers/teacherCotroller.ts";
 
 const teacherRouter = Router();
 
 // Require authentication for all teacher routes
 teacherRouter.use(verifyUser);
-
+teacherRouter.post("/user/togleBlock", toggleBlockStudent)
 teacherRouter.post("/courses/create", createCourse);
 teacherRouter.put("/courses/update", updateCourse);
 teacherRouter.delete("/courses/delete", deleteCourse);
