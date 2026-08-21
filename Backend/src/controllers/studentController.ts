@@ -101,10 +101,7 @@ const searchCourses = async (req: Request, res: Response) => {
 
         const filter: any = {};
 
-        // Exclude courses from blocked users
-        if (user.blockedUsers && user.blockedUsers.length > 0) {
-            filter.owner = { $nin: user.blockedUsers };
-        }
+      
 
         // Search text matching name or description
         if (searchQuery.trim()) {
@@ -195,11 +192,7 @@ const getCourseFeed = async (req: Request, res: Response) => {
 
         const filter: any = {};
 
-        // Exclude courses from blocked users
-        if (user.blockedUsers && user.blockedUsers.length > 0) {
-            filter.owner = { $nin: user.blockedUsers };
-        }
-
+   
         let sortOption: any = { createdAt: -1 };
 
         switch (feedFilter) {

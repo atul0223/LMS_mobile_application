@@ -24,7 +24,7 @@ const verifyUser = async (req: Request, res: Response, next: NextFunction) => {
         if (!userId) {
             return res.status(401).json({ message: "Invalid Access Token" });
         }
-        const user = await User.findById(userId).select("_id username fullName profilePic email blockedUsers role isVerified enrolledCources");
+        const user = await User.findById(userId).select("_id username fullName profilePic email role isVerified enrolledCources");
         if (!user) {
             return res.status(401).json({ message: "User not found or Invalid Access Token" });
         }
