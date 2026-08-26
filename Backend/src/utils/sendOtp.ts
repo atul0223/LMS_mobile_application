@@ -1,7 +1,7 @@
 import axios from "axios";
 import User from "../models/userModel.ts";
 
-const sendOtp = async (email) => {
+const sendOtp = async (email: string) => {
   const otp = Math.floor(100000 + Math.random() * 900000);
 
   
@@ -47,7 +47,7 @@ const sendOtp = async (email) => {
         },
       }
     );
-  } catch (error) {
+  } catch (error: any) {
   console.error("Brevo API email failed:", {
     status: error?.response?.status,
     data: error?.response?.data,

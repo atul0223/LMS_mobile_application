@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express';
 import User from '../models/userModel.ts'
-import sendOtp from '../utils/sendOtp.js';
-import generateJWT from '../utils/jwtokengenerator.js';
+import sendOtp from '../utils/sendOtp.ts';
+import generateJWT from '../utils/jwtokengenerator.ts';
 export const customSignup = async (req: Request, res: Response) => {
 
     const { username, password, email, fullName, role } = req?.body;
@@ -114,7 +114,6 @@ export const login = async (req: Request, res: Response) => {
     }
 
     if (!user.isVerified) {
-        const token = generateJWT(user._id, process.env.EMAILTIME);
         sendOtp(user.email)
 
         await user.save({ validateBeforeSave: false });

@@ -1,6 +1,6 @@
 import type { Request, Response } from 'express';
 import Course from '../models/courseModel.ts';
-import User from '../models/userModel.ts';
+
 export const createCourse = async (req: Request, res: Response) => {
     if (!req.user) {
         return res.status(401).json({ message: "Unauthorized request" });

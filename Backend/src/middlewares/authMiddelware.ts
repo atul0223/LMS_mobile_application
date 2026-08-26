@@ -1,6 +1,7 @@
-import { NextFunction, Request, Response } from "express";
+import type { NextFunction, Request, Response } from "express";
 import User from "../models/userModel.ts";
-import jwt, { JwtPayload } from "jsonwebtoken";
+import jwt from "jsonwebtoken";
+import type { JwtPayload } from "jsonwebtoken";
 
 type JwtPayloadWithId = JwtPayload & { id?: string };
 
