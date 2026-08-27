@@ -1,7 +1,7 @@
 import type { Request, Response } from "express";
 import crypto from "crypto";
 import fs from "fs-extra";
-import { getVideoDuration } from "../utils/videoEncoding.ts";
+import { getVideoDuration, compressVideo } from "../utils/videoEncoding.ts";
 import { uploadVideoToCloudinary } from "../utils/cloudinaryUploader.ts";
 import Video from "../models/videoModel.ts";
 
@@ -27,14 +27,27 @@ export const videoUpload = async (req: Request, res: Response): Promise<any> => 
         const rawDurationSeconds = await getVideoDuration(tempInputFile);
         const fileSizeBytes = req.file.size;
 
+        let finalInputFile = tempInputFile;
+        const maxSizeBytes = 95 * 1024 * 1024; // 95 MB threshold
+
+        if (fileSizeBytes > maxSizeBytes) {
+            console.log(`Video size (${(fileSizeBytes / (1024 * 1024)).toFixed(2)} MB) exceeds limit. Compressing to <95MB...`);
+            const compressedFilePath = `${tempInputFile}-compressed.mp4`;
+            await compressVideo(tempInputFile, compressedFilePath, rawDurationSeconds, 95);
+            
+            // Swap reference to compressed file and delete original
+            finalInputFile = compressedFilePath;
+            await fs.remove(tempInputFile).catch(() => {});
+        }
+
         const durationFormatted = `${Math.floor(rawDurationSeconds / 60)}m ${Math.round(rawDurationSeconds % 60)}s`;
         const sizeFormatted = `${(fileSizeBytes / (1024 * 1024)).toFixed(2)} MB`;
 
         // 2. Upload video directly to Cloudinary (which handles HLS eager transformation)
-        const result = await uploadVideoToCloudinary(tempInputFile, videoId);
+        const result = await uploadVideoToCloudinary(finalInputFile, videoId);
 
         // 3. Scrub temporary disk fingerprints instantly
-        await fs.remove(tempInputFile);
+        await fs.remove(finalInputFile).catch(() => {});
 
         // Generate the m3u8 URL based on Cloudinary streaming profile
         // Cloudinary URL format for streaming profile sp_hd:
@@ -63,6 +76,7 @@ export const videoUpload = async (req: Request, res: Response): Promise<any> => 
         console.error('Workflow Pipeline Execution Failure:', error);
 
         await fs.remove(tempInputFile).catch(() => { });
+        await fs.remove(`${tempInputFile}-compressed.mp4`).catch(() => { });
 
         return res.status(500).json({ error: 'Adaptive processing or database record index creation failed.' });
     }
