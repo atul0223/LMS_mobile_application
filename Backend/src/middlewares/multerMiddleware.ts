@@ -2,8 +2,7 @@ import multer, { type FileFilterCallback } from 'multer';
 import type { Request } from 'express';
 import path from 'path';
 import fs from 'fs-extra';
-import pkg from 'uuid';
-const { v4: uuidv4 } = pkg;
+import crypto from 'crypto';
 
 import * as url from 'url';
 const __dirname = url.fileURLToPath(new URL('.', import.meta.url));
@@ -17,7 +16,7 @@ const storage = multer.diskStorage({
     },
     filename: (req, file, cb) => {
         // Generate a random UUID and append the original file extension
-        const uniqueId = uuidv4(); 
+        const uniqueId = crypto.randomUUID(); 
         const fileExtension = path.extname(file.originalname);
         
         cb(null, `${uniqueId}${fileExtension}`); // e.g., "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d.mp4"
@@ -35,7 +34,7 @@ const fileFilter = (req: Request, file: Express.Multer.File, cb: FileFilterCallb
 export const uploadMiddleware = multer({
     storage: storage,
     limits: {
-        fileSize: 100 * 1024 * 1024, // 100 MB limit
+        fileSize: 500 * 1024 * 1024, // 100 MB limit
     },
     fileFilter: fileFilter
 });

@@ -1,11 +1,8 @@
 import type { Request, Response } from "express";
-import * as url from 'url';
-import pkg from "uuid";
-const { v4: uuidv4 } = pkg;
-import path from "path";
+import crypto from "crypto";
 import fs from "fs-extra";
-import { encodeToHLS, getVideoDuration } from "../utils/videoEncoding.ts";
-import { uploadDirectoryToB2 } from "../utils/b2uploader.ts";
+import { getVideoDuration } from "../utils/videoEncoding.ts";
+import { uploadVideoToCloudinary } from "../utils/cloudinaryUploader.ts";
 import Video from "../models/videoModel.ts";
 
 export const videoUpload = async (req: Request, res: Response): Promise<any> => {
@@ -23,9 +20,7 @@ export const videoUpload = async (req: Request, res: Response): Promise<any> => 
     }
 
     const tempInputFile = req.file.path;
-    const videoId = uuidv4();
-    const __dirname = url.fileURLToPath(new URL('.', import.meta.url));
-    const tempOutputDir = path.join(__dirname, `../tmp/hls-${videoId}`);
+    const videoId = crypto.randomUUID();
 
     try {
         // 1. Calculate duration and size from the raw uploaded disk asset
@@ -35,19 +30,17 @@ export const videoUpload = async (req: Request, res: Response): Promise<any> => 
         const durationFormatted = `${Math.floor(rawDurationSeconds / 60)}m ${Math.round(rawDurationSeconds % 60)}s`;
         const sizeFormatted = `${(fileSizeBytes / (1024 * 1024)).toFixed(2)} MB`;
 
-        // 2. Encode local media into adaptive multi-bitrate HLS structure
-        await encodeToHLS(tempInputFile, tempOutputDir);
+        // 2. Upload video directly to Cloudinary (which handles HLS eager transformation)
+        const result = await uploadVideoToCloudinary(tempInputFile, videoId);
 
-        // 3. Upload generated HLS folders directly onto Backblaze B2
-        await uploadDirectoryToB2(tempOutputDir, videoId);
-
-        // 4. Scrub temporary disk fingerprints instantly
+        // 3. Scrub temporary disk fingerprints instantly
         await fs.remove(tempInputFile);
-        await fs.remove(tempOutputDir);
 
-        const masterPlaylistUrl = `https://${process.env.B2_BUCKET_NAME}.${process.env.B2_ENDPOINT}/${videoId}/master.m3u8`;
+        // Generate the m3u8 URL based on Cloudinary streaming profile
+        // Cloudinary URL format for streaming profile sp_hd:
+        const masterPlaylistUrl = result.secure_url.replace('/upload/', '/upload/sp_hd/').replace(/\.[^/.]+$/, ".m3u8");
 
-        // 5. Commit record data payload straight to MongoDB database
+        // 4. Commit record data payload straight to MongoDB database
         const savedVideoRecord = await Video.create({
             title,
             description,
@@ -70,7 +63,6 @@ export const videoUpload = async (req: Request, res: Response): Promise<any> => 
         console.error('Workflow Pipeline Execution Failure:', error);
 
         await fs.remove(tempInputFile).catch(() => { });
-        await fs.remove(tempOutputDir).catch(() => { });
 
         return res.status(500).json({ error: 'Adaptive processing or database record index creation failed.' });
     }
