@@ -1,15 +1,9 @@
-import { Stack } from "expo-router";
+import { Tabs } from "expo-router/js-tabs";
 import theme from "@/theme";
 
-/**
- * PLACEHOLDER — owned by Agent B (see FRONTEND_PLAN.md, Part 2 §3).
- *
- * A Stack so the route group resolves. Replace with the Courses / New Course
- * tab layout, styled to match `(student)/_layout.tsx` exactly.
- */
 export default function TeacherLayout() {
     return (
-        <Stack
+        <Tabs
             screenOptions={{
                 headerStyle: { backgroundColor: theme.colors.surface },
                 headerTintColor: theme.colors.textPrimary,
@@ -18,10 +12,23 @@ export default function TeacherLayout() {
                     fontWeight: theme.type.heading.fontWeight,
                 },
                 headerShadowVisible: false,
-                contentStyle: { backgroundColor: theme.colors.background },
+                tabBarActiveTintColor: theme.colors.primary,
+                tabBarInactiveTintColor: theme.colors.textSecondary,
+                tabBarStyle: {
+                    backgroundColor: theme.colors.surface,
+                    borderTopColor: theme.colors.border,
+                    borderTopWidth: theme.layout.hairline,
+                },
+                tabBarLabelStyle: {
+                    fontSize: theme.type.caption.fontSize,
+                    fontWeight: "600",
+                },
+                sceneStyle: { backgroundColor: theme.colors.background },
             }}
         >
-            <Stack.Screen name="index" options={{ title: "My courses" }} />
-        </Stack>
+            <Tabs.Screen name="index" options={{ title: "Courses" }} />
+            <Tabs.Screen name="course/new" options={{ title: "New Course" }} />
+            <Tabs.Screen name="course/[id]" options={{ href: null, title: "Edit Course" }} />
+        </Tabs>
     );
 }

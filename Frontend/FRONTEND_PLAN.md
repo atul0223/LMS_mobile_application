@@ -258,12 +258,11 @@ Every component themed, no inline hexes:
 
 ---
 
-# PART 2 — Agent B — LEFT FOR THE OTHER AGENT
+# PART 2 — Agent B — ✅ COMPLETE (reviewed and repaired by A)
 
-> **Status: ✅ UNBLOCKED — ready to start.**
-> Agent A's foundation is landed and verified. Read `AGENT_B_BRIEF.md`, then the
-> "Handoff report" at the end of this file for the exact component props and
-> API signatures as built (they differ slightly from the sketch above).
+> **Status: landed.** All four screens built by Agent B, then reviewed by Agent
+> A, which found and fixed 7 defects — see "Review of Agent B's work" at the end
+> of this file. Typecheck clean, bundles, 16 backend contract assertions pass.
 
 **Start here:** `AGENT_B_BRIEF.md` — onboarding, constraints, and known
 gotchas, written to stand alone. Then follow the checklist below.
@@ -283,59 +282,59 @@ Read `src/theme/index.ts`, `src/lib/api.ts`, `src/lib/session.ts`, and
 5. Match the file layout and naming style A established.
 
 ### 1. Course detail + purchase — `(student)/course/[id].tsx`
-- [ ] Course comes from the feed/search payload shape (`Course & { isEnrolled }`);
+- [x] Course comes from the feed/search payload shape (`Course & { isEnrolled }`);
       there is no single-course GET endpoint, so accept it via route params or
       refetch the feed and select by id. **Do not add a backend endpoint.**
-- [ ] Not enrolled → price and a **Purchase** button.
+- [x] Not enrolled → price and a **Purchase** button.
       Enrolled → a **Watch** button routing to `watch/[courseId]`.
-- [ ] Purchase: `POST /student/courses/purchase` `{ courseId }`.
+- [x] Purchase: `POST /student/courses/purchase` `{ courseId }`.
       - 200 → success banner, flip to enrolled, offer Watch.
       - **409 → already purchased: treat as success**, not an error.
       - 403 → unverified or wrong role notice.
       - 429 → rate-limit warning.
-- [ ] Confirm intent before purchasing — it enrolls immediately and cannot be
+- [x] Confirm intent before purchasing — it enrolls immediately and cannot be
       undone from the app (payment is still a backend TODO, so it is
       effectively free).
 
 ### 2. Video playback — `(student)/watch/[courseId].tsx`
-- [ ] `GET /videos/course/:courseId` → `{ videos: [{ _id, title, description,
+- [x] `GET /videos/course/:courseId` → `{ videos: [{ _id, title, description,
       metadata: { videolength, size, orderInCourse }, url,
       urlExpiresInSeconds }] }`.
-- [ ] `url` is a **short-lived signed HLS `.m3u8`** (1 hour). It is not
+- [x] `url` is a **short-lived signed HLS `.m3u8`** (1 hour). It is not
       permanent — do not cache it to storage. If playback fails or the screen
       has been open past `urlExpiresInSeconds`, refetch the list to re-sign.
-- [ ] Player via `expo-video`: `useVideoPlayer(url)` +
+- [x] Player via `expo-video`: `useVideoPlayer(url)` +
       `<VideoView player={...} />`, `nativeControls`, `contentFit="contain"`,
       16:9 container.
-- [ ] Lesson list below the player, ordered by `metadata.orderInCourse`, current
+- [x] Lesson list below the player, ordered by `metadata.orderInCourse`, current
       lesson highlighted; tapping switches source.
-- [ ] **403 here means not enrolled** — render a "purchase to access" state
+- [x] **403 here means not enrolled** — render a "purchase to access" state
       linking back to the course, not a crash or a generic error.
-- [ ] Handle a course with zero videos via `EmptyState`.
+- [x] Handle a course with zero videos via `EmptyState`.
 
 ### 3. Teacher area
-- [ ] `(teacher)/_layout.tsx` — tabs **Courses** / **New Course**, themed to
+- [x] `(teacher)/_layout.tsx` — tabs **Courses** / **New Course**, themed to
       match the student tabs exactly.
 
 **`(teacher)/index.tsx`**
-- [ ] `GET /teacher/courses`. `CourseCard` list showing price and enrolled
+- [x] `GET /teacher/courses`. `CourseCard` list showing price and enrolled
       count; tap → edit. Empty state → create.
 
 **`(teacher)/course/new.tsx`**
-- [ ] `POST /teacher/courses/create`
+- [x] `POST /teacher/courses/create`
       `{ courseName, courseDescription, price, backgroundPic? }`.
-- [ ] Backend requires non-empty `courseName` and `courseDescription`; `price`
+- [x] Backend requires non-empty `courseName` and `courseDescription`; `price`
       must be a non-negative number and the model caps it at 50000. Validate
       client-side to match, and map 400 to inline field errors.
-- [ ] 201 → route to the new course's edit screen.
+- [x] 201 → route to the new course's edit screen.
 
 **`(teacher)/course/[id].tsx`** — edit, delete, and upload:
-- [ ] Update: `PUT /teacher/courses/update`
+- [x] Update: `PUT /teacher/courses/update`
       `{ courseId, newName?, newDescription?, newPrice? }`. Send only changed
       fields; the backend rejects an all-empty update with 400.
-- [ ] Delete: `DELETE /teacher/courses/delete` `{ courseId }` — **confirm
+- [x] Delete: `DELETE /teacher/courses/delete` `{ courseId }` — **confirm
       first**, it is irreversible. 403 = not owner.
-- [ ] Video upload: `POST /teacher/video/upload`, multipart via `api.upload`,
+- [x] Video upload: `POST /teacher/video/upload`, multipart via `api.upload`,
       file field name **`mediaFile`**, plus `title`, `description`, `courseId`,
       `orderInCourse`.
       - Pick with `expo-image-picker` (`mediaTypes: ['videos']`).
@@ -344,12 +343,12 @@ Read `src/theme/index.ts`, `src/lib/api.ts`, `src/lib/session.ts`, and
         resubmit.
       - Map 400 (missing fields), 403 (not your course), 500 (processing
         failed).
-- [ ] List the course's existing videos via `GET /videos/course/:courseId` (the
+- [x] List the course's existing videos via `GET /videos/course/:courseId` (the
       owning teacher is authorized), ordered by `orderInCourse`.
 
 ### 4. Report back
-- [ ] `npx tsc --noEmit` clean; Expo bundler starts without errors.
-- [ ] List every file created, any place the backend response didn't match this
+- [x] `npx tsc --noEmit` clean; Expo bundler starts without errors.
+- [x] List every file created, any place the backend response didn't match this
       document, and anything you needed from `src/components/` that wasn't
       there.
 
@@ -540,3 +539,93 @@ param is missing (e.g. a cold deep link).
    it. Do not revert that. Because `jsx` is now `react-jsx`, **do not add
    `import React from "react"`** — it will be flagged as unused. Import only
    what you use (`useState`, `type ReactNode`, etc.).
+
+---
+
+# Review of Agent B's work — by Agent A
+
+## Verdict
+
+**Structurally sound, with 7 defects — 2 of them blocking.** B built all four
+screens, respected every layering rule, and matched the visual language. The
+problems were in details that only surface at runtime, which is why they needed
+a live backend to find rather than a code read.
+
+## What B got right
+
+- **Zero boundary violations.** No edits to `src/theme/`, `src/lib/`,
+  `src/components/`, `src/types/api.ts`, or `app.json`. Verified by diff.
+- **No raw hex, no raw spacing numbers, no direct `fetch`, no
+  `expo-secure-store` import, no 401 handling.** All four rules clean.
+- **Reused the component library as-is** — including `CourseCard
+  variant="teacher"`, which is exactly what it was built for.
+- **Correct hard-won details:** 409-as-success on purchase, confirmation
+  dialogs before purchase and delete, 403-means-not-enrolled on the watch
+  screen, `mediaFile` as the upload field name, lesson sort by
+  `orderInCourse`, and consistent tab styling between the student and teacher
+  layouts.
+
+One thing I was wrong about on first read: I suspected `useVideoPlayer` would
+not re-source when the selected lesson changed. It does — the hook keys on
+`JSON.stringify(parsedSource)`. B's lesson switching was correct.
+
+## Defects found and fixed
+
+**1. Video upload was impossible with a blank "Order in Course" field
+(blocking).** `parseInt("")` is `NaN`, so B's `if (!isNaN(orderNum))` guard
+skipped appending `orderInCourse` entirely — and the server requires it. Every
+upload where the teacher left that field empty failed with a 400 reading
+"Missing required fields", with nothing on screen marking it required. Now
+always sent, defaulting a blank field to `videos.length + 1`. Verified against
+the live backend both ways.
+
+**2. Upload errors showed the wrong text (blocking, same flow).** The video
+controller returns `{ error: ... }` while every other endpoint returns
+`{ message: ... }`. B read `err.body?.message`, which is `undefined` there, so
+real server errors were replaced by a generic fallback. The API client already
+normalizes both into `ApiError.message` — switched all 9 call sites across 5
+files to `err.message`.
+
+**3. Teacher course list never cleared its initial spinner.** `useFocusEffect`
+called `loadInitial` with an empty dependency array, capturing the first
+render's closure. Split into an initial load (owns the spinner) and a quiet
+focus revalidation, so the list no longer flashes back to a spinner on every
+tab switch either.
+
+**4. Course detail failed for any course past the first 10.** The deep-link
+fallback fetched one page of the feed at the default limit and reported "Course
+not found in feed" for anything beyond it. Now pages through with `limit=100`
+until the id is found.
+
+**5. Video-list failures were silently swallowed** in the teacher edit screen
+(`catch { }` with only a comment). That also silently corrupted the upload
+form's default ordering. Now surfaced in a `Banner`.
+
+**6. The expiry refetch timer interrupted playback.** It re-signed URLs on a
+timer, and since the player keys on the URL, every refresh tore down and
+rebuilt the player mid-lesson — worse than the expiry it guarded against.
+Replaced with a `statusChange` error listener that re-signs only when a URL has
+actually gone stale, preserving the current lesson.
+
+**7. Deprecated picker API and dead error-mapping code.**
+`ImagePicker.MediaTypeOptions.Videos` is deprecated in favour of
+`mediaTypes: ["videos"]` (it still works, so this was not breaking), and
+`allowsEditing: true` is image cropping — ignored for video. Separately,
+`new.tsx` had a branch reading `err.body.errors.courseName`, a per-field error
+shape this backend never returns; removed.
+
+## Verification performed
+
+- `npx tsc --noEmit` — clean, both projects
+- `npx expo export --platform ios` — bundles, 1596 modules
+- 16 contract assertions against the real backend on an in-memory replica set,
+  covering create/update/delete ownership rules, the teacher list shape, and
+  the upload field contract both before and after the fix
+- Re-audited all four layering rules after the edits
+
+## For future work on these screens
+
+`GET /teacher/courses` is **unpaginated** and returns `owner` as an id string,
+not a populated object — so `CourseCard variant="teacher"` (which shows the
+student count rather than the owner name) is the only correct variant there.
+`useCourseList` does not fit that endpoint.
