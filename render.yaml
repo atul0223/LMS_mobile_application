@@ -15,9 +15,11 @@ services:
     # fails with "file not found".
     dockerfilePath: ./Backend/Dockerfile
     dockerContext: ./Backend
-    # ffmpeg transcoding is CPU-bound and uploads can be large; the free tier
-    # will time out or OOM on anything sizeable.
-    plan: starter
+    # Free tier: 512 MB RAM, shared CPU, and the instance sleeps after ~15
+    # minutes idle. Everything except large video uploads works fine on it —
+    # see the ffmpeg note in Backend/Dockerfile. Upgrade to `starter` when
+    # uploads start failing.
+    plan: free
     region: singapore
     healthCheckPath: /health
     envVars:
