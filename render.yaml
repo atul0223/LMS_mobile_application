@@ -1,0 +1,49 @@
+# Render blueprint. Commit this at the repository root; Render reads it when
+# you create a Blueprint deploy.
+#
+# The service builds from Backend/Dockerfile rather than Render's native Node
+# runtime because video uploads shell out to ffmpeg, which that runtime does
+# not provide.
+services:
+  - type: web
+    name: lms-backend
+    runtime: docker
+    dockerfilePath: ./Backend/Dockerfile
+    # ffmpeg transcoding is CPU-bound and uploads can be large; the free tier
+    # will time out or OOM on anything sizeable.
+    plan: starter
+    region: singapore
+    healthCheckPath: /health
+    envVars:
+      # Render injects PORT; the app reads it. Do not set it here.
+      - key: NODE_ENV
+        value: production
+
+      # Secrets: left unset on purpose so they are entered in the dashboard
+      # and never committed. Render will prompt for each on first deploy.
+      - key: MONGODB_URI
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: BREVO_API_KEY
+        sync: false
+      - key: MAIL_SENDER_EMAIL
+        sync: false
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+      # Without this, playback URLs are signed but never expire — a shared
+      # link keeps working indefinitely, which defeats the paywall.
+      - key: CLOUDINARY_AUTH_TOKEN_KEY
+        sync: false
+
+      - key: MAIL_SENDER_NAME
+        value: LMS
+
+      # Comma-separated browser origins. Leave unset only while the native app
+      # is the sole client; unset means any origin is reflected.
+      - key: CORS_ORIGINS
+        sync: false

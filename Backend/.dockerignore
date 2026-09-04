@@ -1,0 +1,23 @@
+# Secrets must never enter the build context — a COPY would bake them into an
+# image layer, where they remain readable even if a later layer deletes them.
+.env
+.env.*
+!.env.example
+
+# Reinstalled inside the image for the correct platform; copying host builds in
+# would break native modules and bloat the context.
+node_modules
+dist
+
+# Runtime scratch space for uploads; recreated by the Dockerfile.
+tmp
+uploads
+
+npm-debug.log*
+*.tsbuildinfo
+
+.git
+.gitignore
+.vscode
+.idea
+.DS_Store
