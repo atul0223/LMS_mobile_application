@@ -8,7 +8,13 @@ services:
   - type: web
     name: lms-backend
     runtime: docker
+    # Both paths are relative to the repository root. dockerContext must point
+    # at Backend/ because the Dockerfile's COPY paths (package.json, src/) are
+    # resolved against the context, not against the Dockerfile's own location.
+    # Leaving it unset defaults the context to the repo root and every COPY
+    # fails with "file not found".
     dockerfilePath: ./Backend/Dockerfile
+    dockerContext: ./Backend
     # ffmpeg transcoding is CPU-bound and uploads can be large; the free tier
     # will time out or OOM on anything sizeable.
     plan: starter
