@@ -10,8 +10,8 @@ const generateJWT = (user: any, time: string | number) => {
     {
       id: userId,
     },
-    process.env.JWT_SECRET as string,
-    { expiresIn: time }
+    process.env.JWT_SECRET as jwt.Secret,
+    { expiresIn: time as any }
   );
 };
 export default generateJWT;
