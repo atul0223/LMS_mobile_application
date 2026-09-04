@@ -1,5 +1,4 @@
 import jwt from "jsonwebtoken";
-import { access } from "node:fs";
 const generateJWT = (user: any, time: string | number) => {
   const userId =
     typeof user === "string" ? user : user?._id?.toString?.() || user?.toString?.();

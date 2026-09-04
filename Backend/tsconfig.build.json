@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    // The base config is tuned for `node --watch src/index.ts` type-stripping,
+    // which requires .ts import specifiers and emits nothing. Emitting real
+    // JavaScript needs both of those inverted, plus rewriting the specifiers
+    // so the compiled output resolves .js at runtime.
+    "noEmit": false,
+    "allowImportingTsExtensions": false,
+    "rewriteRelativeImportExtensions": true,
+    "sourceMap": true
+  },
+  "exclude": ["dist", "node_modules"]
+}

@@ -1,9 +1,46 @@
 import type { Request, Response } from "express";
+import mongoose from "mongoose";
 import Course from "../models/courseModel.ts";
 import Transaction from "../models/transactionModel.ts";
 import User from "../models/userModel.ts";
+import asyncHandler from "../utils/asyncHandler.ts";
 
-const purchaseCourse = async (req: Request, res: Response) => {
+/** Escapes regex metacharacters so user input is matched literally. */
+const escapeRegex = (input: string): string => input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
+ * Applies the enrollment and its side effects.
+ *
+ * The `$ne` guard makes the enrollment push idempotent, so a retry cannot
+ * double-charge or double-count even outside a transaction.
+ */
+const applyEnrollment = async (
+    userId: any,
+    course: any,
+    price: number,
+    session: mongoose.ClientSession | null
+) => {
+    const options = session ? { session } : {};
+    const enrollment = await User.updateOne(
+        { _id: userId, enrolledCources: { $ne: course._id } },
+        {
+            $push: { enrolledCources: course._id },
+            $inc: { lifeTimeSpentMoney: price }
+        },
+        options
+    );
+    if (enrollment.modifiedCount === 0) {
+        return false;
+    }
+    await Course.updateOne(
+        { _id: course._id },
+        { $inc: { enrolledStudentCount: 1 } },
+        options
+    );
+    return true;
+};
+
+const purchaseCourse = asyncHandler(async (req: Request, res: Response) => {
     const user = req.user;
     const { courseId } = req.body;
     //todo payment logic
@@ -11,13 +48,16 @@ const purchaseCourse = async (req: Request, res: Response) => {
         return res.status(401).json({ message: "please login first" });
     }
     if (user.role !== "student") {
-        return res.status(401).json({ message: "not a valid role for this action" });
+        return res.status(403).json({ message: "not a valid role for this action" });
     }
     if (!user.isVerified) {
-        return res.status(401).json({ message: "user not verified" });
+        return res.status(403).json({ message: "user not verified" });
     }
     if (!courseId) {
-        return res.status(401).json({ message: "course id required" });
+        return res.status(400).json({ message: "course id required" });
+    }
+    if (!mongoose.isValidObjectId(courseId)) {
+        return res.status(400).json({ message: "invalid course id" });
     }
     const course = await Course.findById(courseId);
     if (!course) {
@@ -31,34 +71,83 @@ const purchaseCourse = async (req: Request, res: Response) => {
     }
 
     const price = course.price ?? 0;
-    const transaction = await Transaction.create({
-        senderId: user._id,
-        courseId: course._id,
-        recieverId: course.owner,
-        status: "pending"
-    });
 
+    // Transactions require a replica set. Where one is available the whole
+    // purchase commits atomically; otherwise fall back to the guarded
+    // sequence so single-node development still works.
+    let session: mongoose.ClientSession | null = null;
     try {
-        //todo replace with real payment gateway capture
-        const enrollment = await User.updateOne(
-            { _id: user._id, enrolledCources: { $ne: course._id } },
-            {
-                $push: { enrolledCources: course._id },
-                $inc: { lifeTimeSpentMoney: price }
+        session = await mongoose.startSession();
+    } catch {
+        session = null;
+    }
+
+    let transaction: any;
+    let enrolled = false;
+
+    if (session) {
+        try {
+            await session.withTransaction(async () => {
+                const [created] = await Transaction.create(
+                    [{
+                        senderId: user._id,
+                        courseId: course._id,
+                        receiverId: course.owner,
+                        status: "pending"
+                    }],
+                    { session }
+                );
+                transaction = created;
+
+                //todo replace with real payment gateway capture
+                enrolled = await applyEnrollment(user._id, course, price, session);
+                if (!enrolled) {
+                    // Abort so the pending transaction record rolls back too.
+                    throw new Error("ALREADY_ENROLLED");
+                }
+
+                transaction.status = "completed";
+                await transaction.save({ session });
+            });
+        } catch (error: any) {
+            if (error?.message === "ALREADY_ENROLLED") {
+                return res.status(409).json({ message: "course already purchased" });
             }
-        );
-        if (enrollment.modifiedCount === 0) {
-            transaction.status = "failed";
-            await transaction.save();
-            return res.status(409).json({ message: "course already purchased" });
+            // Transactions unsupported on this deployment — retry unguarded.
+            if (error?.code === 20 || /Transaction numbers are only allowed/i.test(error?.message || "")) {
+                session = null;
+            } else {
+                console.error("purchase transaction failed:", error);
+                return res.status(500).json({ message: "purchase failed, please try again" });
+            }
+        } finally {
+            await session?.endSession().catch(() => { });
         }
-        await Course.updateOne({ _id: course._id }, { $inc: { enrolledStudentCount: 1 } });
-        transaction.status = "completed";
-        await transaction.save();
-    } catch (error) {
-        transaction.status = "failed";
-        await transaction.save();
-        return res.status(500).json({ message: "purchase failed, please try again" });
+    }
+
+    if (!session) {
+        transaction = await Transaction.create({
+            senderId: user._id,
+            courseId: course._id,
+            receiverId: course.owner,
+            status: "pending"
+        });
+
+        try {
+            //todo replace with real payment gateway capture
+            enrolled = await applyEnrollment(user._id, course, price, null);
+            if (!enrolled) {
+                transaction.status = "failed";
+                await transaction.save();
+                return res.status(409).json({ message: "course already purchased" });
+            }
+            transaction.status = "completed";
+            await transaction.save();
+        } catch (error) {
+            transaction.status = "failed";
+            await transaction.save().catch(() => { });
+            return res.status(500).json({ message: "purchase failed, please try again" });
+        }
     }
 
     return res.status(200).json({
@@ -66,18 +155,18 @@ const purchaseCourse = async (req: Request, res: Response) => {
         transactionId: transaction._id,
         courseId: course._id
     });
-};
+});
 
-const searchCourses = async (req: Request, res: Response) => {
+const searchCourses = asyncHandler(async (req: Request, res: Response) => {
     const user = req.user;
     if (!user) {
         return res.status(401).json({ message: "please login first" });
     }
     if (user.role !== "student") {
-        return res.status(401).json({ message: "not a valid role for this action" });
+        return res.status(403).json({ message: "not a valid role for this action" });
     }
     if (!user.isVerified) {
-        return res.status(401).json({ message: "user not verified" });
+        return res.status(403).json({ message: "user not verified" });
     }
 
     try {
@@ -103,9 +192,10 @@ const searchCourses = async (req: Request, res: Response) => {
 
       
 
-        // Search text matching name or description
+        // Search text matching name or description. Input is escaped so a
+        // crafted pattern cannot become a catastrophically backtracking regex.
         if (searchQuery.trim()) {
-            const searchRegex = new RegExp(searchQuery.trim(), "i");
+            const searchRegex = new RegExp(escapeRegex(searchQuery.trim()), "i");
             filter.$or = [
                 { name: { $regex: searchRegex } },
                 { courseDescription: { $regex: searchRegex } }
@@ -165,18 +255,18 @@ const searchCourses = async (req: Request, res: Response) => {
     } catch (error) {
         return res.status(500).json({ message: "Failed to search courses, please try again" });
     }
-};
+});
 
-const getCourseFeed = async (req: Request, res: Response) => {
+const getCourseFeed = asyncHandler(async (req: Request, res: Response) => {
     const user = req.user;
     if (!user) {
         return res.status(401).json({ message: "please login first" });
     }
     if (user.role !== "student") {
-        return res.status(401).json({ message: "not a valid role for this action" });
+        return res.status(403).json({ message: "not a valid role for this action" });
     }
     if (!user.isVerified) {
-        return res.status(401).json({ message: "user not verified" });
+        return res.status(403).json({ message: "user not verified" });
     }
 
     try {
@@ -248,6 +338,6 @@ const getCourseFeed = async (req: Request, res: Response) => {
     } catch (error) {
         return res.status(500).json({ message: "Failed to fetch course feed, please try again" });
     }
-};
+});
 
 export { purchaseCourse, searchCourses, getCourseFeed };

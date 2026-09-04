@@ -16,7 +16,10 @@ export type CourseDocument = ICourse & Document;
 
 const courseSchema = new mongoose.Schema<ICourse>({
     owner:{
-        type:mongoose.Types.ObjectId
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        required: true,
+        index: true
     },
     name: {
         type: String,

@@ -1,7 +1,15 @@
 import { Router } from "express";
-import { customSignup, login, verifyOtp } from "../controllers/userController.ts";
+import { customSignup, getMe, login, verifyOtp } from "../controllers/userController.ts";
+import verifyUser from "../middlewares/authMiddleware.ts";
+import { authLimiter } from "../middlewares/rateLimiters.ts";
+
 const router = Router();
-router.route("/customSignup").post(customSignup);
-router.route("/verifyOtp").post(verifyOtp)
-router.route("/login").post(login)
-export default router
+
+// Credential endpoints carry the strict limiter; the authenticated profile read
+// does not, so failed logins cannot lock a signed-in user out of their own data.
+router.route("/customSignup").post(authLimiter, customSignup);
+router.route("/verifyOtp").post(authLimiter, verifyOtp);
+router.route("/login").post(authLimiter, login);
+router.route("/me").get(verifyUser, getMe);
+
+export default router;

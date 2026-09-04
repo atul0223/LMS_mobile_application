@@ -1,12 +1,12 @@
 import { Router } from "express";
-import verifyUser from "../middlewares/authMiddelware.ts";
+import verifyUser from "../middlewares/authMiddleware.ts";
 import {
     createCourse,
     deleteCourse,
     updateCourse,
     getTeacherCourses,
 
-} from "../controllers/teacherCotroller.ts";
+} from "../controllers/teacherController.ts";
 import { uploadMiddleware } from "../middlewares/multerMiddleware.ts";
 import { videoUpload } from "../controllers/videoController.ts";
 

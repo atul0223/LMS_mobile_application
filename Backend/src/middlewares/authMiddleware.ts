@@ -32,7 +32,12 @@ const verifyUser = async (req: Request, res: Response, next: NextFunction) => {
         req.user = user;
         next();
     } catch (error: any) {
-        return res.status(401).json({ message: error.message || "Invalid or expired access token" });
+        // Never echo the verifier's message — it distinguishes malformed,
+        // wrong-signature and expired tokens, which aids forgery attempts.
+        const expired = error?.name === "TokenExpiredError";
+        return res.status(401).json({
+            message: expired ? "Access token expired" : "Invalid access token"
+        });
     }
 };
 export default verifyUser;

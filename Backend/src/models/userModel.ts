@@ -5,11 +5,18 @@ export interface IPasswordSchema {
     attempts?: number;
     lastPasswords?: string[];
     attemptPasswords?: string[];
+    /** Password auth is refused until this moment passes. */
+    lockedUntil?: Date | null;
 }
 
 export interface IOtpSchema {
+    /** SHA-256 of the delivered code — the plaintext is never stored. */
     code?: string | null;
     createdAt?: Date;
+    /** Failed verification attempts against the current code. */
+    attempts?: number;
+    /** Earliest moment a replacement OTP may be issued. */
+    nextSendAllowedAt?: Date | null;
 }
 
 export interface IUser {
@@ -63,7 +70,11 @@ const userSchema = new mongoose.Schema<IUser>({
         }],
         attemptPasswords: [{
             type: String
-        }]
+        }],
+        lockedUntil: {
+            type: Date,
+            default: null
+        }
     },
     otp: {
         code: {
@@ -73,6 +84,14 @@ const userSchema = new mongoose.Schema<IUser>({
         createdAt: {
             type: Date,
             default: Date.now
+        },
+        attempts: {
+            type: Number,
+            default: 0
+        },
+        nextSendAllowedAt: {
+            type: Date,
+            default: null
         }
     },
     role: {

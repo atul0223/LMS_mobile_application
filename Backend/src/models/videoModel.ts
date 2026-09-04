@@ -11,7 +11,12 @@ export interface IVideo {
     course?: mongoose.Types.ObjectId;
     title: string;
     description?: string;
-    url: string;
+    /**
+     * Cloudinary public_id of the uploaded asset. Playback URLs are signed on
+     * demand from this rather than stored, so access always re-checks
+     * entitlement instead of relying on a URL handed out earlier.
+     */
+    publicId: string;
     metadata?: IVideoMetadata;
     createdAt?: Date;
     updatedAt?: Date;
@@ -22,7 +27,9 @@ export type VideoDocument = IVideo & Document;
 const videoSchema = new mongoose.Schema<IVideo>({
     course: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'Course'
+        ref: 'Course',
+        required: true,
+        index: true
     },
     title: {
         type: String,
@@ -31,7 +38,7 @@ const videoSchema = new mongoose.Schema<IVideo>({
     description: {
         type: String
     },
-    url: {
+    publicId: {
         type: String,
         required: true,
         trim: true
@@ -44,6 +51,8 @@ const videoSchema = new mongoose.Schema<IVideo>({
 }, {
     timestamps: true
 });
+
+videoSchema.index({ course: 1, "metadata.orderInCourse": 1 });
 
 const Video = mongoose.model<IVideo>('Video', videoSchema);
 export default Video;

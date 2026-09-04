@@ -1,5 +1,5 @@
 import { Router } from "express";
-import verifyUser from "../middlewares/authMiddelware.ts";
+import verifyUser from "../middlewares/authMiddleware.ts";
 import { purchaseCourse, searchCourses, getCourseFeed } from "../controllers/studentController.ts";
 
 const studentRouter = Router();
