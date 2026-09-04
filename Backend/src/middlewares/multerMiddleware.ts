@@ -31,10 +31,23 @@ const fileFilter = (req: Request, file: Express.Multer.File, cb: FileFilterCallb
     }
 };
 
+/**
+ * Upload ceiling, in megabytes.
+ *
+ * Uploads are written to the container's ephemeral disk, and anything over
+ * 95 MB is additionally transcoded to a second file alongside the original —
+ * so peak disk use is roughly twice the upload size. On a small instance a
+ * large upload fills the disk and the request fails midway through ffmpeg,
+ * which is a slow and confusing failure.
+ *
+ * Overridable so a larger instance can raise it without a code change.
+ */
+const MAX_UPLOAD_MB = Number(process.env.MAX_UPLOAD_MB) || 200;
+
 export const uploadMiddleware = multer({
     storage: storage,
     limits: {
-        fileSize: 700 * 1024 * 1024, // 700 MB limit
+        fileSize: MAX_UPLOAD_MB * 1024 * 1024,
     },
     fileFilter: fileFilter
 });

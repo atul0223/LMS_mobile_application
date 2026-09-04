@@ -10,8 +10,14 @@ import { getToken } from "./storage";
 
 const BASE_URL = (process.env.EXPO_PUBLIC_API_URL || "http://localhost:5002").replace(/\/+$/, "");
 
-/** Requests that outlive this are aborted so the UI cannot hang indefinitely. */
-const TIMEOUT_MS = 10_000;
+/**
+ * Requests that outlive this are aborted so the UI cannot hang indefinitely.
+ *
+ * Set generously because free hosting tiers sleep idle instances: the first
+ * request after a sleep has to wait out a cold start, which routinely takes
+ * 30-60s. A tighter timeout would make the first login of every session fail.
+ */
+const TIMEOUT_MS = 60_000;
 /** Uploads transcode server-side and legitimately take minutes. */
 const UPLOAD_TIMEOUT_MS = 10 * 60_000;
 
