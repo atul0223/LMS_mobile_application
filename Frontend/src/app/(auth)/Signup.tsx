@@ -1,52 +1,72 @@
-import Checkbox from "expo-checkbox";
-import BackgroundSVG from '../../../assets/images/background.svg';
-import EmailIconSVG from '../../../assets/images/emailIcon.svg';
-import LockIconSVG from '../../../assets/images/lock.svg';
-import { useState } from "react";
 import {
-  KeyboardAvoidingView,
-  Platform,
+  View,
+  Text,
   ScrollView,
   StyleSheet,
-  Text,
   TextInput,
   TouchableOpacity,
-  View,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
-
-export default function Login() {
+import React, { useState } from "react";
+import LockIconSVG from "../../../assets/images/lock.svg";
+import EmailIconSVG from "../../../assets/images/emailIcon.svg";
+import { SafeAreaView } from "react-native-safe-area-context";
+import BackgroundSVG from "../../../assets/images/background.svg";
+import UserSVG from "../../../assets/images/user.svg";
+import Checkbox from "expo-checkbox";
+import { Link } from "expo-router";
+export default function Signup() {
+  const [isKeyboardOpen, setIskeyboardOpen] = useState(true);
   const [isChecked, setChecked] = useState(false);
-
   return (
     <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      // iOS needs 'padding', Android usually works better with 'height' or no behavior
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-    >
-      <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
-        <View
-          style={{
-            height: `70%`,
-            width: "100%",
-            marginTop: "-45%",
-          }}
+          style={{ flex: 1 }}
+          // iOS needs 'padding', Android usually works better with 'height' or no behavior
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
         >
-          <BackgroundSVG
-            width="100%" height="100%"
-          />
-        </View>
-        <View style={styles.bottomContainer}>
-          <Text style={styles.heading}>Sign in </Text>
-          <View style={{ marginTop: "13%" }}>
+    <SafeAreaView>
+      <ScrollView keyboardShouldPersistTaps="handled">
+        <BackgroundSVG
+          style={[
+            { zIndex: -1 },
+            isKeyboardOpen ? { marginTop: "-60%" } : { marginTop: "50%" },
+          ]}
+        />
+        <View style={{}}>
+          <Text
+            style={{
+              fontWeight: "bold",
+              color: "#555",
+              fontSize: 35,
+              paddingHorizontal: "7%",
+              marginTop: -58,
+              textDecorationLine: "underline",
+            }}
+          >
+            Sign up
+          </Text>
+
+          <View
+            style={{ width: "100%", flex: 1, padding: "7%", marginTop: "5%" }}
+          >
+            <View style={styles.inputGroup}>
+              {/* 1. Your "span" (Label) on top */}
+              <Text style={styles.label}>Full Name</Text>
+
+              {/* 2. Your input box with the icon */}
+              <View style={styles.inputWrapper}>
+                <UserSVG width={20} height={20} style={styles.icon} />
+                <TextInput placeholder="john deo" style={styles.textInput} />
+              </View>
+            </View>
             <View style={styles.inputGroup}>
               {/* 1. Your "span" (Label) on top */}
               <Text style={styles.label}>Email</Text>
 
               {/* 2. Your input box with the icon */}
               <View style={styles.inputWrapper}>
-                <EmailIconSVG
-                  width={20} height={20} style={styles.icon}
-                />
+                <EmailIconSVG width={20} height={20} style={styles.icon} />
                 <TextInput
                   placeholder="demo@email.com"
                   style={styles.textInput}
@@ -59,9 +79,7 @@ export default function Login() {
 
               {/* 2. Your input box with the icon */}
               <View style={styles.inputWrapper}>
-                <LockIconSVG
-                  width={20} height={20} style={styles.icon}
-                />
+                <LockIconSVG width={20} height={20} style={styles.icon} />
                 <TextInput
                   placeholder="**********"
                   style={styles.textInput}
@@ -75,7 +93,9 @@ export default function Login() {
                     onValueChange={setChecked}
                     color={isChecked ? "#FF8383" : undefined} // Turns blue when checked
                   />
-                  <Text style={styles.checkboxLabel}>Remember me</Text>
+                  <Text style={styles.checkboxLabel}>
+                    Accept term & conditions
+                  </Text>
                 </View>
                 <Text style={{ color: "#FF8383", fontWeight: "bold" }}>
                   Forgot password?
@@ -87,11 +107,11 @@ export default function Login() {
                   flex: 1,
                   gap: 10,
                   width: "100%",
-                  marginTop: "25%",
+                  marginTop: "20%",
                 }}
               >
                 <TouchableOpacity style={styles.myButton}>
-                  <Text style={styles.buttonText}>Login</Text>
+                  <Text style={styles.buttonText}>Sign up</Text>
                 </TouchableOpacity>
                 <View
                   style={{
@@ -103,16 +123,25 @@ export default function Login() {
                     gap: 5,
                   }}
                 >
-                  <Text style={{ color: "#555" }}>Don’t have an Account ?</Text>
-                  <Text style={{ color: "#FF8383", fontWeight: "bold" }}>
-                    Sign up
+                  <Text style={{ color: "#555" }}>
+                    Already have an Account ?
                   </Text>
+                  
+                  <Link href="/Login" asChild>
+                    <TouchableOpacity>
+                      <Text style={{ color: "#FF8383", fontWeight: "bold" }}>
+                        login
+                      </Text>
+                    </TouchableOpacity>
+                  </Link>
                 </View>
               </View>
             </View>
           </View>
+          <View></View>
         </View>
       </ScrollView>
+    </SafeAreaView>
     </KeyboardAvoidingView>
   );
 }
@@ -185,6 +214,7 @@ const styles = StyleSheet.create({
   },
   checkboxLabel: {
     fontSize: 16,
+
     color: "#555",
   },
 });
