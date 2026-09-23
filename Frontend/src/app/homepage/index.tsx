@@ -86,41 +86,66 @@ export default function Homepage() {
       }}
     >
       <Image source={image} style={{ resizeMode: "none", maxHeight: 200 }} />
-      <View style={{ flexDirection: "row", marginVertical: "4%" }}>
-        <View
-          style={{
-            width: 45,
-            height: 45,
-            borderRadius: 25,
-            overflow: "hidden",
-            backgroundColor: "#f5ecec",
-            borderWidth: 1,
-            marginRight: 10,
-          }}
-        >
-          <StudentSVG width="100%" height="100%" />
-        </View>
-        <View
-          style={{
-            flex: 1,
-            
-            overflow: "hidden",
-            maxHeight: 50,
-          }}
-        >
-        <Text>full name</Text>
-        <Text numberOfLines={1}>username</Text>
+      <View
+        style={{
+          justifyContent: "space-between",
+          alignItems: "center",
+          flexDirection: "row",
+        }}
+      >
+        <View style={{ flexDirection: "row", marginVertical: "4%" }}>
+          <View
+            style={{
+              width: 45,
+              height: 45,
+              borderRadius: 25,
+              overflow: "hidden",
+              backgroundColor: "#f5ecec",
+              borderWidth: 1,
+              marginRight: 10,
+            }}
+          >
+            <StudentSVG width="100%" height="100%" />
+          </View>
+
+          <View
+            style={{
+              flex: 1,
+
+              overflow: "hidden",
+              maxHeight: 50,
+            }}
+          >
+            <Text>full name</Text>
+            <Text numberOfLines={1}>username</Text>
+          </View>
+          <View style={{marginHorizontal:"2%"}}>
+            <Text>50$</Text>
+          </View>
         </View>
       </View>
       <Text style={styles.title} numberOfLines={1}>
-        {title}
+        Title : {title}
+      </Text>
+      <Text style={styles.title} numberOfLines={2}>
+        Description : Lorem ipsum dolor sit amet consectetur adipisicing elit.
+        Incidunt non temporibus quae repellat ad quia sint optio! Voluptate a
+        laudantium architecto ullam quo corporis id aperiam omnis illum, optio
+        vel.
       </Text>
     </View>
   );
   return (
     <SafeAreaView style={{ flex: 1 }}>
-      <ScrollView>
-        <View style={{ padding: 16 }}>
+      <FlatList
+        data={DATA2}
+        renderItem={({ item }) => (
+          <Item2 title={item.title} image={item.image} />
+        )}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={{ padding: 16 }}
+        ListHeaderComponent={
+          <>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
             <View
               style={{
@@ -200,18 +225,11 @@ export default function Homepage() {
             data={DATA}
             renderItem={({ item }) => <Item title={item.title} />}
             keyExtractor={(item) => item.id}
-            contentContainerStyle={{ gap: 12, marginVertical:"5%" }}
+            contentContainerStyle={{ gap: 12, paddingVertical: 16 }}
           />
-
-          <FlatList
-            data={DATA2}
-            renderItem={({ item }) => (
-              <Item2 title={item.title} image={item.image} />
-            )}
-            keyExtractor={(item) => item.id}
-          />
-        </View>
-      </ScrollView>
+          </>
+        }
+      />
     </SafeAreaView>
   );
 }
