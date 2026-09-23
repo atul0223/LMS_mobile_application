@@ -13,30 +13,40 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { router } from "expo-router";
+import { SafeAreaView } from "react-native-safe-area-context";
+import OtpInput from "../../components/OtpInput";
 
 export default function Login() {
   const [isChecked, setChecked] = useState(false);
+  const [needsOtp, setNeedsOtp] = useState(false);
 
   return (
     <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      // iOS needs 'padding', Android usually works better with 'height' or no behavior
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-    >
-      <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
-        <View
-          style={{
-            height: `70%`,
-            width: "100%",
-            marginTop: "-45%",
-          }}
+          style={{ flex: 1 }}
+          // iOS needs 'padding', Android usually works better with 'height' or no behavior
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
         >
-          <BackgroundSVG
-            width="100%" height="100%"
-          />
-        </View>
+    <SafeAreaView style={{ flex: 1 }}>
+      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ flexGrow: 1 }}>
+        
+        <BackgroundSVG
+          style={[
+            { zIndex: -1 ,  marginTop: "-38%"},
+           
+          ]} width="100%" 
+        />
         <View style={styles.bottomContainer}>
-          <Text style={styles.heading}>Sign in </Text>
+          <Text style={styles.heading}>{needsOtp ? "Verify Otp" : "Login"}</Text>
+          {needsOtp ? (
+            <View style={{ marginTop: "13%" }}>
+              <OtpInput
+                onSubmit={(otp) => {
+                  console.log("otp", otp);
+                }}
+              />
+            </View>
+          ) : (
           <View style={{ marginTop: "13%" }}>
             <View style={styles.inputGroup}>
               {/* 1. Your "span" (Label) on top */}
@@ -104,15 +114,19 @@ export default function Login() {
                   }}
                 >
                   <Text style={{ color: "#555" }}>Don’t have an Account ?</Text>
-                  <Text style={{ color: "#FF8383", fontWeight: "bold" }}>
-                    Sign up
-                  </Text>
+                  <TouchableOpacity onPress={() => router.replace("/Signup")}>
+                                      <Text style={{ color: "#FF8383", fontWeight: "bold" }}>
+                                        Signup
+                                      </Text>
+                                    </TouchableOpacity>
                 </View>
               </View>
             </View>
           </View>
+          )}
         </View>
       </ScrollView>
+      </SafeAreaView>
     </KeyboardAvoidingView>
   );
 }
@@ -178,10 +192,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     width: "100%",
     alignItems: "flex-end",
-    color: "blue",
     justifyContent: "space-between",
-    textDecorationLine: "underline",
-    fontSize: 16,
   },
   checkboxLabel: {
     fontSize: 16,
