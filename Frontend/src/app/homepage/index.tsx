@@ -1,4 +1,11 @@
-import { View, Text, ScrollView, TextInput, Pressable } from "react-native";
+import {
+  View,
+  Text,
+  ScrollView,
+  TextInput,
+  Pressable,
+  Image,
+} from "react-native";
 import React from "react";
 import { SafeAreaView } from "react-native-safe-area-context";
 import StudentSVG from "../../../assets/images/student.svg";
@@ -9,10 +16,37 @@ import {
   TouchableOpacity,
 } from "react-native";
 export default function Homepage() {
+  const DATA2 = [
+    {
+      id: "bd7acbea-c1b1-46c2-aed5-3ad53abb28ba",
+      title: "your meetings",
+      image: require("../../../assets/images/course.png"),
+    },
+    {
+      id: "3ac68afc-c605-48d3-a4f8-fbd91aa97f63",
+      title: "trending",
+      image: require("../../../assets/images/course.png"),
+    },
+    {
+      id: "58694a0f-3da1-471f-bd96-145571e29d72",
+      title: "Most viewed",
+      image: require("../../../assets/images/course.png"),
+    },
+    {
+      id: "58694a0f-3da1-471f-bd96-145571e29d722",
+      title: "most purchased",
+      image: require("../../../assets/images/course.png"),
+    },
+    {
+      id: "58694a0f-3da1-471f-bd96-145571e29d723",
+      title: "most liked",
+      image: require("../../../assets/images/course.png"),
+    },
+  ];
   const DATA = [
     {
       id: "bd7acbea-c1b1-46c2-aed5-3ad53abb28ba",
-      title: "your courses",
+      title: "your meetings",
     },
     {
       id: "3ac68afc-c605-48d3-a4f8-fbd91aa97f63",
@@ -25,7 +59,8 @@ export default function Homepage() {
     {
       id: "58694a0f-3da1-471f-bd96-145571e29d722",
       title: "most purchased",
-    },{
+    },
+    {
       id: "58694a0f-3da1-471f-bd96-145571e29d723",
       title: "most liked",
     },
@@ -34,8 +69,53 @@ export default function Homepage() {
 
   const Item = ({ title }: ItemProps) => (
     <TouchableOpacity style={styles.item}>
-      <Text style={styles.title}>{title}</Text>
+      <Text style={styles.title} numberOfLines={1}>
+        {title}
+      </Text>
     </TouchableOpacity>
+  );
+  const Item2 = ({ title, image, user }: any) => (
+    <View
+      style={{
+        width: "100%",
+        borderRadius: 10,
+        overflow: "hidden",
+        borderWidth: 1,
+        marginVertical: "2%",
+        padding: "4%",
+      }}
+    >
+      <Image source={image} style={{ resizeMode: "none", maxHeight: 200 }} />
+      <View style={{ flexDirection: "row", marginVertical: "4%" }}>
+        <View
+          style={{
+            width: 45,
+            height: 45,
+            borderRadius: 25,
+            overflow: "hidden",
+            backgroundColor: "#f5ecec",
+            borderWidth: 1,
+            marginRight: 10,
+          }}
+        >
+          <StudentSVG width="100%" height="100%" />
+        </View>
+        <View
+          style={{
+            flex: 1,
+            
+            overflow: "hidden",
+            maxHeight: 50,
+          }}
+        >
+        <Text>full name</Text>
+        <Text numberOfLines={1}>username</Text>
+        </View>
+      </View>
+      <Text style={styles.title} numberOfLines={1}>
+        {title}
+      </Text>
+    </View>
   );
   return (
     <SafeAreaView style={{ flex: 1 }}>
@@ -114,38 +194,38 @@ export default function Homepage() {
               </TouchableOpacity>
             </View>
           </View>
-          <ScrollView
+          <FlatList
             horizontal={true}
             showsHorizontalScrollIndicator={false}
-            style={{ flex: 1, flexDirection: "row" }}
-          >
-            <FlatList
-              horizontal={true}
-              data={DATA}
-              renderItem={({ item }) => <Item title={item.title} />}
-              keyExtractor={(item) => item.id}
-              
-            />
-          </ScrollView>
+            data={DATA}
+            renderItem={({ item }) => <Item title={item.title} />}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={{ gap: 12, marginVertical:"5%" }}
+          />
+
+          <FlatList
+            data={DATA2}
+            renderItem={({ item }) => (
+              <Item2 title={item.title} image={item.image} />
+            )}
+            keyExtractor={(item) => item.id}
+          />
         </View>
       </ScrollView>
     </SafeAreaView>
   );
 }
 const styles = StyleSheet.create({
-  
   item: {
     backgroundColor: "#FF8383",
-    borderRadius: 10,paddingHorizontal:10,
+    borderRadius: 10,
+    paddingHorizontal: 10,
     overflow: "hidden",
-    marginHorizontal:"2%",
-    width:150,
-    flex:1,
-    marginVertical:"15%",
-    maxHeight:"15%",
-    justifyContent:"center",
-    alignItems:"center",
-    borderWidth:1
+    width: 150,
+    paddingVertical: 5,
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1,
   },
   title: {
     fontSize: 18,
