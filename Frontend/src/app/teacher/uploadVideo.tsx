@@ -106,24 +106,16 @@ export default function UploadVideoScreen() {
       setUploading(true);
       setError(null);
 
-      const formData = new FormData();
-      formData.append("title", title.trim());
-      formData.append("description", description.trim());
-      formData.append("courseId", selectedCourseId);
-      formData.append("orderInCourse", String(parsedOrder));
-
-      const fileUri =
-        Platform.OS === "android"
-          ? selectedFile.uri
-          : selectedFile.uri.replace("file://", "");
-
-      formData.append("mediaFile", {
-        uri: fileUri,
-        name: selectedFile.name || "lesson.mp4",
-        type: selectedFile.mimeType || "video/mp4",
-      } as any);
-
-      const res = await uploadTeacherVideo(formData);
+      const res = await uploadTeacherVideo({
+        title: title.trim(),
+        description: description.trim(),
+        courseId: selectedCourseId,
+        orderInCourse: parsedOrder,
+        fileUri: selectedFile.uri,
+        fileName: selectedFile.name || "lesson.mp4",
+        mimeType: selectedFile.mimeType || "video/mp4",
+        file: (selectedFile as any).file,
+      });
 
       showToast(res.message || "Video processed & uploaded successfully! 🎬", "success");
       router.replace({

@@ -4,7 +4,7 @@ import StudentSVG from "../../assets/images/student.svg";
 import { useAuth } from "../context/AuthContext";
 
 export default function Index() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, role } = useAuth();
 
   if (isLoading) {
     return (
@@ -21,7 +21,7 @@ export default function Index() {
 
   // All secure routing is centralized on this index file:
   if (isAuthenticated) {
-    return <Redirect href="/(tabs)/explore" />;
+    return <Redirect href={role === "teacher" ? "/(tabs)/teacher" : "/(tabs)/explore"} />;
   }
 
   return <Redirect href="/(auth)/Login" />;

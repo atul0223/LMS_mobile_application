@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
+import * as FileSystem from 'expo-file-system/legacy';
 import {
   AuthResponse,
   Course,
@@ -9,6 +10,7 @@ import {
   SingleVideoResponse,
   TeacherCoursesResponse,
   User,
+  VideoUploadPayload,
 } from '../types/api';
 
 const TOKEN_KEY = 'lms_access_token';
@@ -322,13 +324,77 @@ export async function deleteCourse(
 }
 
 export async function uploadTeacherVideo(
-  formData: FormData
+  payload: FormData | VideoUploadPayload
 ): Promise<{ success: boolean; message: string; data: any }> {
+  // On native platforms (iOS/Android), use FileSystem.uploadAsync for high-performance streaming multipart upload
+  if (Platform.OS !== 'web' && !(payload instanceof FormData) && payload.fileUri) {
+    const baseUrl = await getBaseUrl();
+    const token = await getStoredToken();
+    const uploadUrl = `${baseUrl}/teacher/video/upload`;
+
+    const uploadResult = await FileSystem.uploadAsync(uploadUrl, payload.fileUri, {
+      httpMethod: 'POST',
+      uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+      fieldName: 'mediaFile',
+      mimeType: payload.mimeType || 'video/mp4',
+      parameters: {
+        title: payload.title,
+        description: payload.description || '',
+        courseId: payload.courseId,
+        orderInCourse: String(payload.orderInCourse),
+      },
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        Accept: 'application/json',
+      },
+    });
+
+    let resData: any = {};
+    try {
+      resData = JSON.parse(uploadResult.body);
+    } catch {
+      resData = { message: uploadResult.body };
+    }
+
+    if (uploadResult.status < 200 || uploadResult.status >= 300) {
+      const errorMsg =
+        resData.message ||
+        resData.error ||
+        `Video upload failed with status ${uploadResult.status}`;
+      const err: any = new Error(errorMsg);
+      err.status = uploadResult.status;
+      err.data = resData;
+      throw err;
+    }
+
+    return resData;
+  }
+
+  // Web or FormData fallback
+  let body: FormData;
+  if (payload instanceof FormData) {
+    body = payload;
+  } else {
+    body = new FormData();
+    body.append('title', payload.title);
+    if (payload.description) body.append('description', payload.description);
+    body.append('courseId', payload.courseId);
+    body.append('orderInCourse', String(payload.orderInCourse));
+
+    if (payload.file) {
+      body.append('mediaFile', payload.file);
+    } else {
+      const blobRes = await fetch(payload.fileUri);
+      const blob = await blobRes.blob();
+      body.append('mediaFile', blob, payload.fileName || 'lesson.mp4');
+    }
+  }
+
   return apiRequest<{ success: boolean; message: string; data: any }>(
     '/teacher/video/upload',
     {
       method: 'POST',
-      body: formData,
+      body,
     }
   );
 }

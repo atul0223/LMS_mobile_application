@@ -49,6 +49,18 @@ export interface AuthResponse {
   accessToken?: string;
   requiresOtp?: boolean;
   emailVerify?: boolean;
+  user?: User;
+}
+
+export interface VideoUploadPayload {
+  title: string;
+  description?: string;
+  courseId: string;
+  orderInCourse: number | string;
+  fileUri: string;
+  fileName?: string;
+  mimeType?: string;
+  file?: any;
 }
 
 export interface CourseFeedResponse {

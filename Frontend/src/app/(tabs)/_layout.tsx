@@ -10,7 +10,7 @@ export default function TabLayout() {
 
   return (
     <Tabs
-      initialRouteName="explore"
+      initialRouteName={isTeacher ? "teacher" : "explore"}
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: "#FF8383",
@@ -44,6 +44,7 @@ export default function TabLayout() {
         name="explore"
         options={{
           title: "Explore",
+          href: isTeacher ? null : "/(tabs)/explore",
           tabBarIcon: ({ color, focused }) => (
             <Ionicons
               name={focused ? "compass" : "compass-outline"}
@@ -58,6 +59,7 @@ export default function TabLayout() {
         name="learning"
         options={{
           title: "My Learning",
+          href: isTeacher ? null : "/(tabs)/learning",
           tabBarIcon: ({ color, focused }) => (
             <Ionicons
               name={focused ? "book" : "book-outline"}

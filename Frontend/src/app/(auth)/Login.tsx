@@ -87,7 +87,11 @@ export default function Login() {
         showToast("Verification code sent to your email ✉️", "info");
       } else if (res.accessToken) {
         showToast("Welcome back!", "success");
-        router.replace("/(tabs)/explore");
+        if (res.user?.role === "teacher") {
+          router.replace("/(tabs)/teacher");
+        } else {
+          router.replace("/(tabs)/explore");
+        }
       }
     } catch (err: any) {
       if (err?.data?.requiresOtp || err?.data?.emailVerify) {
@@ -161,13 +165,17 @@ export default function Login() {
     try {
       setLoading(true);
       setError(null);
-      await verifyUserOtp({
+      const res = await verifyUserOtp({
         identifier: identifier.trim(),
         otp,
       });
 
       showToast("Successfully authenticated! 🎉", "success");
-      router.replace("/(tabs)/explore");
+      if (res.user?.role === "teacher") {
+        router.replace("/(tabs)/teacher");
+      } else {
+        router.replace("/(tabs)/explore");
+      }
     } catch (err: any) {
       const msg = err.message || "Invalid or expired OTP";
       setError(msg);

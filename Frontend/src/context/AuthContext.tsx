@@ -69,16 +69,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const loginUser = async (payload: { identifier: string; password: string }) => {
     const res = await login(payload);
+    let currentUser: User | undefined;
     if (res.accessToken) {
       setToken(res.accessToken);
       try {
         const meRes = await getMe();
         setUser(meRes.user);
+        currentUser = meRes.user;
       } catch (err) {
         console.error('Failed to fetch user profile after login', err);
       }
     }
-    return res;
+    return { ...res, user: currentUser || res.user };
   };
 
   const signupUser = async (payload: {
@@ -93,16 +95,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const verifyUserOtp = async (payload: { identifier: string; otp: string }) => {
     const res = await verifyOtp(payload);
+    let currentUser: User | undefined;
     if (res.accessToken) {
       setToken(res.accessToken);
       try {
         const meRes = await getMe();
         setUser(meRes.user);
+        currentUser = meRes.user;
       } catch (err) {
         console.error('Failed to fetch user profile after OTP verification', err);
       }
     }
-    return res;
+    return { ...res, user: currentUser || res.user };
   };
 
   const sendUserOtp = async (identifier: string) => {
