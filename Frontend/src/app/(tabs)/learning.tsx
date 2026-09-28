@@ -99,7 +99,7 @@ export default function MyLearningScreen() {
               </Text>
               <TouchableOpacity
                 style={styles.exploreBtn}
-                onPress={() => router.push("/(tabs)/index")}
+                onPress={() => router.push("/(tabs)/explore")}
               >
                 <Text style={styles.exploreBtnText}>Browse Available Courses</Text>
               </TouchableOpacity>

@@ -1,19 +1,16 @@
 import React from "react";
-import { Redirect, Tabs } from "expo-router";
+import { Tabs } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Platform } from "react-native";
 import { useAuth } from "../../context/AuthContext";
 
 export default function TabLayout() {
-  const { role, isAuthenticated, isLoading } = useAuth();
+  const { role } = useAuth();
   const isTeacher = role === "teacher";
-
-  if (!isLoading && !isAuthenticated) {
-    return <Redirect href="/(auth)/Login" />;
-  }
 
   return (
     <Tabs
+      initialRouteName="explore"
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: "#FF8383",
@@ -44,7 +41,7 @@ export default function TabLayout() {
       }}
     >
       <Tabs.Screen
-        name="index"
+        name="explore"
         options={{
           title: "Explore",
           tabBarIcon: ({ color, focused }) => (

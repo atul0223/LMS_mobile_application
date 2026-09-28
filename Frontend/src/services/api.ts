@@ -44,27 +44,37 @@ export const setCustomBaseUrl = async (url: string) => {
   await AsyncStorage.setItem(API_URL_KEY, url);
 };
 
+let inMemoryToken: string | null = null;
+
 export const getStoredToken = async (): Promise<string | null> => {
+  if (inMemoryToken) return inMemoryToken;
   try {
-    return await AsyncStorage.getItem(TOKEN_KEY);
+    const token = await AsyncStorage.getItem(TOKEN_KEY);
+    if (token) {
+      inMemoryToken = token;
+      return token;
+    }
   } catch {
-    return null;
+    // If native storage has issues, fall back to inMemoryToken
   }
+  return inMemoryToken;
 };
 
 export const setStoredToken = async (token: string): Promise<void> => {
+  inMemoryToken = token;
   try {
     await AsyncStorage.setItem(TOKEN_KEY, token);
-  } catch (e) {
-    console.error('Failed to save access token', e);
+  } catch {
+    // In-memory token is already set so the session will continue seamlessly
   }
 };
 
 export const removeStoredToken = async (): Promise<void> => {
+  inMemoryToken = null;
   try {
     await AsyncStorage.removeItem(TOKEN_KEY);
-  } catch (e) {
-    console.error('Failed to remove access token', e);
+  } catch {
+    // Silent catch
   }
 };
 

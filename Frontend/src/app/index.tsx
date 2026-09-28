@@ -19,8 +19,9 @@ export default function Index() {
     );
   }
 
+  // All secure routing is centralized on this index file:
   if (isAuthenticated) {
-    return <Redirect href="/(tabs)/index" />;
+    return <Redirect href="/(tabs)/explore" />;
   }
 
   return <Redirect href="/(auth)/Login" />;

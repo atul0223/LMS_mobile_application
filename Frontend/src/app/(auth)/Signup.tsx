@@ -151,7 +151,7 @@ export default function Signup() {
       });
 
       showToast("Email verified! Welcome to LMS 🎉", "success");
-      router.replace("/(tabs)/index");
+      router.replace("/(tabs)/explore");
     } catch (err: any) {
       const msg = err.message || "Invalid or expired OTP";
       setError(msg);

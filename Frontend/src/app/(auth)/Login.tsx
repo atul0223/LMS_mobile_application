@@ -5,7 +5,6 @@ import LockIconSVG from "../../../assets/images/lock.svg";
 import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -22,9 +21,11 @@ import OtpInput from "../../components/OtpInput";
 import { useAuth } from "../../context/AuthContext";
 import { useToast } from "../../components/Toast";
 
+type AuthMode = "login" | "forgot_step1" | "forgot_step2";
+
 export default function Login() {
+  const [authMode, setAuthMode] = useState<AuthMode>("login");
   const [isChecked, setChecked] = useState(false);
-  const [needsOtp, setNeedsOtp] = useState(false);
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -59,6 +60,7 @@ export default function Login() {
     }, 1000);
   };
 
+  // Standard password login
   const handleLogin = async () => {
     if (!identifier.trim()) {
       setError("Please enter your email or username");
@@ -80,16 +82,16 @@ export default function Login() {
       });
 
       if (res.requiresOtp || res.emailVerify) {
-        setNeedsOtp(true);
+        setAuthMode("forgot_step2");
         startCooldown(60);
         showToast("Verification code sent to your email ✉️", "info");
       } else if (res.accessToken) {
         showToast("Welcome back!", "success");
-        router.replace("/(tabs)/index");
+        router.replace("/(tabs)/explore");
       }
     } catch (err: any) {
       if (err?.data?.requiresOtp || err?.data?.emailVerify) {
-        setNeedsOtp(true);
+        setAuthMode("forgot_step2");
         startCooldown(60);
         showToast("Please enter verification OTP sent to your email", "info");
       } else {
@@ -102,18 +104,19 @@ export default function Login() {
     }
   };
 
-  const handleTriggerOtp = async () => {
+  // Step 1: Submit email to request OTP
+  const handleRequestOtp = async () => {
     if (!identifier.trim()) {
-      setError("Please enter your email or username first");
+      setError("Please enter your email or username");
       showToast("Email or username is required", "error");
       return;
     }
 
     try {
-      setResendLoading(true);
+      setLoading(true);
       setError(null);
       const res = await sendUserOtp(identifier.trim());
-      setNeedsOtp(true);
+      setAuthMode("forgot_step2");
       startCooldown(60);
       showToast(res.message || "Verification code sent to your email ✉️", "info");
     } catch (err: any) {
@@ -121,10 +124,33 @@ export default function Login() {
       setError(msg);
       showToast(msg, "error");
     } finally {
+      setLoading(false);
+    }
+  };
+
+  // Resend code trigger from Step 2
+  const handleResendOtp = async () => {
+    if (!identifier.trim()) {
+      setError("Identifier is missing");
+      return;
+    }
+
+    try {
+      setResendLoading(true);
+      setError(null);
+      const res = await sendUserOtp(identifier.trim());
+      startCooldown(60);
+      showToast(res.message || "New code sent to your email ✉️", "info");
+    } catch (err: any) {
+      const msg = err.message || "Failed to resend code";
+      setError(msg);
+      showToast(msg, "error");
+    } finally {
       setResendLoading(false);
     }
   };
 
+  // Step 2: Submit OTP to verify and log in
   const handleOtpSubmit = async (otp: string) => {
     if (!identifier.trim()) {
       setError("Please provide your email or username");
@@ -141,7 +167,7 @@ export default function Login() {
       });
 
       showToast("Successfully authenticated! 🎉", "success");
-      router.replace("/(tabs)/index");
+      router.replace("/(tabs)/explore");
     } catch (err: any) {
       const msg = err.message || "Invalid or expired OTP";
       setError(msg);
@@ -166,10 +192,16 @@ export default function Login() {
             width="100%"
           />
           <View style={styles.bottomContainer}>
+            {/* Header Title */}
             <Text style={styles.heading}>
-              {needsOtp ? "Verify Otp" : "Login"}
+              {authMode === "login"
+                ? "Login"
+                : authMode === "forgot_step1"
+                ? "Forgot Password"
+                : "Verify Otp"}
             </Text>
 
+            {/* Error Message Box */}
             {error ? (
               <View style={styles.errorBox}>
                 <Ionicons
@@ -182,10 +214,16 @@ export default function Login() {
               </View>
             ) : null}
 
-            {needsOtp ? (
+            {/* ----------------- FORGOT PASSWORD STEP 1: ENTER EMAIL ----------------- */}
+            {authMode === "forgot_step1" && (
               <View style={{ marginTop: "10%" }}>
+                <Text style={styles.subtext}>
+                  Enter your registered email address or username. We will send you a
+                  6-digit verification code.
+                </Text>
+
                 <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Account Email or Username</Text>
+                  <Text style={styles.label}>Email or Username</Text>
                   <View style={styles.inputWrapper}>
                     <EmailIconSVG width={20} height={20} style={styles.icon} />
                     <TextInput
@@ -198,10 +236,40 @@ export default function Login() {
                       }}
                       autoCapitalize="none"
                       style={styles.textInput}
+                      autoFocus
                     />
                   </View>
                 </View>
 
+                <TouchableOpacity
+                  style={[styles.myButton, loading && styles.buttonDisabled, { marginTop: 24 }]}
+                  onPress={handleRequestOtp}
+                  disabled={loading}
+                >
+                  {loading ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={styles.buttonText}>Submit</Text>
+                  )}
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={() => {
+                    setError(null);
+                    setAuthMode("login");
+                  }}
+                  style={{ marginTop: 25, alignSelf: "center", padding: 8 }}
+                >
+                  <Text style={{ color: "#FF8383", fontWeight: "bold" }}>
+                    ← Back to Login
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* ----------------- FORGOT PASSWORD STEP 2: ENTER OTP ----------------- */}
+            {authMode === "forgot_step2" && (
+              <View style={{ marginTop: "10%" }}>
                 <Text style={styles.subtext}>
                   Enter the 6-digit verification code sent to{" "}
                   <Text style={{ fontWeight: "bold", color: "#333" }}>
@@ -212,25 +280,45 @@ export default function Login() {
                 <OtpInput
                   loading={loading}
                   onSubmit={handleOtpSubmit}
-                  onResend={handleTriggerOtp}
+                  onResend={handleResendOtp}
                   resendCooldown={resendCooldown}
                   resendLoading={resendLoading}
                   submitButtonText="Verify Code & Sign In"
                 />
 
-                <TouchableOpacity
-                  onPress={() => {
-                    setNeedsOtp(false);
-                    setError(null);
-                  }}
-                  style={{ marginTop: 25, alignSelf: "center", padding: 8 }}
-                >
-                  <Text style={{ color: "#FF8383", fontWeight: "bold" }}>
-                    ← Back to Password Login
-                  </Text>
-                </TouchableOpacity>
+                <View style={{ marginTop: 20, alignItems: "center", gap: 10 }}>
+                  <TouchableOpacity
+                    onPress={() => {
+                      setError(null);
+                      setAuthMode("forgot_step1");
+                    }}
+                    style={{ padding: 6 }}
+                  >
+                    <Text style={{ color: "#777", fontSize: 13 }}>
+                      Wrong email/username?{" "}
+                      <Text style={{ color: "#FF8383", fontWeight: "bold" }}>
+                        Change
+                      </Text>
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    onPress={() => {
+                      setError(null);
+                      setAuthMode("login");
+                    }}
+                    style={{ padding: 8 }}
+                  >
+                    <Text style={{ color: "#FF8383", fontWeight: "bold" }}>
+                      ← Back to Login
+                    </Text>
+                  </TouchableOpacity>
+                </View>
               </View>
-            ) : (
+            )}
+
+            {/* ----------------- STANDARD LOGIN ----------------- */}
+            {authMode === "login" && (
               <View style={{ marginTop: "12%" }}>
                 <View style={styles.inputGroup}>
                   <Text style={styles.label}>Email or Username</Text>
@@ -286,13 +374,13 @@ export default function Login() {
                       />
                       <Text style={styles.checkboxLabel}>Remember me</Text>
                     </View>
+
+                    {/* Forgot password link -> triggers Step 1 */}
                     <TouchableOpacity
-                      onPress={() =>
-                        Alert.alert(
-                          "Forgot Password",
-                          "You can verify and log in using an OTP code sent to your registered email address."
-                        )
-                      }
+                      onPress={() => {
+                        setError(null);
+                        setAuthMode("forgot_step1");
+                      }}
                     >
                       <Text style={{ color: "#FF8383", fontWeight: "bold" }}>
                         Forgot password?
@@ -306,7 +394,7 @@ export default function Login() {
                       flex: 1,
                       gap: 12,
                       width: "100%",
-                      marginTop: "16%",
+                      marginTop: "18%",
                     }}
                   >
                     <TouchableOpacity
@@ -321,25 +409,6 @@ export default function Login() {
                       )}
                     </TouchableOpacity>
 
-                    {/* Direct OTP Trigger / Verification Button */}
-                    <TouchableOpacity
-                      style={styles.secondaryButton}
-                      onPress={() => {
-                        setError(null);
-                        setNeedsOtp(true);
-                      }}
-                    >
-                      <Ionicons
-                        name="shield-checkmark-outline"
-                        size={18}
-                        color="#FF8383"
-                        style={{ marginRight: 6 }}
-                      />
-                      <Text style={styles.secondaryButtonText}>
-                        Have a verification code? Verify with OTP
-                      </Text>
-                    </TouchableOpacity>
-
                     <View
                       style={{
                         flexDirection: "row",
@@ -351,7 +420,7 @@ export default function Login() {
                       }}
                     >
                       <Text style={{ color: "#555" }}>Don’t have an Account ?</Text>
-                      <TouchableOpacity onPress={() => router.replace("/Signup")}>
+                      <TouchableOpacity onPress={() => router.replace("/(auth)/Signup")}>
                         <Text style={{ color: "#FF8383", fontWeight: "bold" }}>
                           Signup
                         </Text>
@@ -391,22 +460,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
     fontWeight: "bold",
   },
-  secondaryButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1.5,
-    borderColor: "#FF8383",
-    backgroundColor: "#fff5f5",
-    paddingVertical: 11,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-  },
-  secondaryButtonText: {
-    color: "#FF8383",
-    fontSize: 14,
-    fontWeight: "600",
-  },
   heading: {
     fontSize: 35,
     fontWeight: "600",
@@ -416,7 +469,7 @@ const styles = StyleSheet.create({
   subtext: {
     fontSize: 14,
     color: "#555",
-    marginBottom: 10,
+    marginBottom: 16,
     lineHeight: 20,
   },
   inputWrapper: {

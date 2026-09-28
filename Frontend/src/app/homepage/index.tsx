@@ -10,5 +10,5 @@ export default function HomepageRedirect() {
     return <Redirect href="/(auth)/Login" />;
   }
 
-  return <Redirect href="/(tabs)/index" />;
+  return <Redirect href="/(tabs)/explore" />;
 }

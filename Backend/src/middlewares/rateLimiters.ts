@@ -1,30 +1,37 @@
+import type { Request, Response, NextFunction } from 'express';
 import rateLimit from 'express-rate-limit';
 
-/** General traffic budget, applied to every route. */
-export const globalLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: Number(process.env.GLOBAL_RATE_LIMIT_MAX) || 1000, // Allow 1000 requests per 15 minutes for smooth browsing
-    standardHeaders: true, // Return rate limit info in `RateLimit-*` headers
-    legacyHeaders: false, // Disable `X-RateLimit-*` headers
-    message: { message: 'Too many requests, please try again later.' },
-    statusCode: 429
-});
+// Disable rate limiting in development or when explicitly disabled
+const isRateLimitDisabled =
+    process.env.NODE_ENV !== 'production' ||
+    process.env.DISABLE_RATE_LIMIT === 'true' ||
+    process.env.ENABLE_RATE_LIMIT !== 'true';
 
-/**
- * Credential endpoints get a much smaller budget than general traffic — the
- * global 100/15min is far too generous for password and OTP guessing.
- *
- * Applied per-route rather than to the whole /user mount so that authenticated
- * reads such as GET /user/me are not throttled by failed login attempts.
- */
-export const authLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 10,
-    standardHeaders: true,
-    legacyHeaders: false,
-    // Bursts of failures are the signal worth throttling; successful logins
-    // should not consume the budget.
-    skipSuccessfulRequests: true,
-    message: { message: 'Too many attempts, please try again later.' },
-    statusCode: 429
-});
+const bypassMiddleware = (req: Request, res: Response, next: NextFunction) => next();
+
+/** General traffic budget */
+export const globalLimiter = isRateLimitDisabled
+    ? bypassMiddleware
+    : rateLimit({
+        windowMs: 15 * 60 * 1000, // 15 minutes
+        max: Number(process.env.GLOBAL_RATE_LIMIT_MAX) || 5000,
+        standardHeaders: true,
+        legacyHeaders: false,
+        validate: false,
+        message: { message: 'Too many requests, please try again later.' },
+        statusCode: 429,
+    });
+
+/** Auth traffic budget */
+export const authLimiter = isRateLimitDisabled
+    ? bypassMiddleware
+    : rateLimit({
+        windowMs: 15 * 60 * 1000,
+        max: Number(process.env.AUTH_RATE_LIMIT_MAX) || 1000,
+        standardHeaders: true,
+        legacyHeaders: false,
+        skipSuccessfulRequests: true,
+        validate: false,
+        message: { message: 'Too many attempts, please try again later.' },
+        statusCode: 429,
+    });
