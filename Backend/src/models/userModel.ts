@@ -122,5 +122,17 @@ const userSchema = new mongoose.Schema<IUser>({
     timestamps: true
 });
 
+// Guard against legacy database documents where otp was stored as a number or string
+userSchema.pre('init', function (doc: any) {
+    if (doc && (typeof doc.otp === 'number' || typeof doc.otp === 'string')) {
+        doc.otp = {
+            code: String(doc.otp),
+            createdAt: new Date(),
+            attempts: 0,
+            nextSendAllowedAt: null
+        };
+    }
+});
+
 const User = mongoose.model<IUser>('User', userSchema);
 export default User;

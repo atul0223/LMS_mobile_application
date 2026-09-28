@@ -10,5 +10,15 @@ const dbConnect = async () => {
     // accepts traffic it cannot serve, so startup must fail loudly instead.
     await mongoose.connect(db_uri);
     console.log("dbConnected Succesfully");
+
+    // Transparently migrate any remaining legacy scalar OTP fields in the background
+    mongoose.connection.collection('users').updateMany(
+        { otp: { $type: "number" } },
+        { $set: { otp: null } }
+    ).catch(() => {});
+    mongoose.connection.collection('users').updateMany(
+        { otp: { $type: "string" } },
+        { $set: { otp: null } }
+    ).catch(() => {});
 };
 export default dbConnect;
