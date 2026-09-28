@@ -3,7 +3,7 @@ import rateLimit from 'express-rate-limit';
 /** General traffic budget, applied to every route. */
 export const globalLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 100, // Limit each IP to 100 requests per windowMs
+    max: Number(process.env.GLOBAL_RATE_LIMIT_MAX) || 1000, // Allow 1000 requests per 15 minutes for smooth browsing
     standardHeaders: true, // Return rate limit info in `RateLimit-*` headers
     legacyHeaders: false, // Disable `X-RateLimit-*` headers
     message: { message: 'Too many requests, please try again later.' },

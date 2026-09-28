@@ -1,88 +1,154 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
-  NativeSyntheticEvent,
+  ActivityIndicator,
+  Pressable,
   StyleSheet,
   Text,
   TextInput,
-  TextInputKeyPressEventData,
   TouchableOpacity,
   View,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 
-type OtpInputProps = {
+export interface OtpInputProps {
   length?: number;
-  onSubmit?: (otp: string) => void;
-};
+  loading?: boolean;
+  value?: string;
+  onChange?: (otp: string) => void;
+  onSubmit: (otp: string) => void;
+  onResend?: () => void;
+  resendCooldown?: number;
+  resendLoading?: boolean;
+  submitButtonText?: string;
+}
 
-export default function OtpInput({ length = 6, onSubmit }: OtpInputProps) {
-  const [digits, setDigits] = useState<string[]>(Array(length).fill(""));
-  const inputs = useRef<(TextInput | null)[]>([]);
+export default function OtpInput({
+  length = 6,
+  loading = false,
+  value: controlledValue,
+  onChange,
+  onSubmit,
+  onResend,
+  resendCooldown = 0,
+  resendLoading = false,
+  submitButtonText = "Verify Code & Sign In",
+}: OtpInputProps) {
+  const [internalCode, setInternalCode] = useState("");
+  const inputRef = useRef<TextInput>(null);
 
-  const focusPrev = (index: number) => {
-    if (index > 0) inputs.current[index - 1]?.focus();
-  };
+  const code = controlledValue !== undefined ? controlledValue : internalCode;
 
-  const handleChange = (text: string, index: number) => {
-    // keep only digits, and take the last typed char (handles fast typing)
-    const value = text.replace(/[^0-9]/g, "").slice(-1);
+  const handleTextChange = (text: string) => {
+    const clean = text.replace(/[^0-9]/g, "").slice(0, length);
+    if (controlledValue === undefined) {
+      setInternalCode(clean);
+    }
+    onChange?.(clean);
 
-    const next = [...digits];
-    next[index] = value;
-    setDigits(next);
-
-    if (value) {
-      if (index < length - 1) inputs.current[index + 1]?.focus();
-    } else {
-      // box was cleared by backspace -> step back
-      focusPrev(index);
+    if (clean.length === length) {
+      onSubmit(clean);
     }
   };
 
-  const handleKeyPress = (
-    e: NativeSyntheticEvent<TextInputKeyPressEventData>,
-    index: number
-  ) => {
-    // only fires usefully when the box is already empty; when it has a digit
-    // handleChange does the stepping back instead
-    if (e.nativeEvent.key === "Backspace" && !digits[index]) {
-      const next = [...digits];
-      if (index > 0) next[index - 1] = "";
-      setDigits(next);
-      focusPrev(index);
-    }
+  const handlePressBoxes = () => {
+    inputRef.current?.focus();
   };
 
-  const otp = digits.join("");
-  const isComplete = otp.length === length;
+  const isComplete = code.length === length;
 
   return (
     <View style={styles.container}>
-      <Text style={styles.label}>Enter the 6 digit OTP</Text>
+      <Text style={styles.label}>Enter 6-digit Verification Code</Text>
 
-      <View style={styles.boxRow}>
-        {digits.map((digit, index) => (
-          <TextInput
-            key={index}
-            ref={(el) => {
-              inputs.current[index] = el;
-            }}
-            value={digit}
-            onChangeText={(text) => handleChange(text, index)}
-            onKeyPress={(e) => handleKeyPress(e, index)}
-            keyboardType="number-pad"
-            maxLength={1}
-            style={[styles.box, digit ? styles.boxFilled : null]}
-          />
-        ))}
-      </View>
+      {/* Hidden native input capturing keyboard, paste, and SMS autofill */}
+      <TextInput
+        ref={inputRef}
+        value={code}
+        onChangeText={handleTextChange}
+        keyboardType="number-pad"
+        maxLength={length}
+        textContentType="oneTimeCode"
+        autoComplete="sms-otp"
+        style={styles.hiddenInput}
+        caretHidden
+        autoFocus
+      />
 
+      {/* Visual digit boxes */}
+      <Pressable onPress={handlePressBoxes} style={styles.boxRow}>
+        {Array.from({ length }).map((_, index) => {
+          const char = code[index] || "";
+          const isCurrent = index === code.length && code.length < length;
+          const isFilled = !!char;
+
+          return (
+            <View
+              key={index}
+              style={[
+                styles.box,
+                isFilled && styles.boxFilled,
+                isCurrent && styles.boxCurrent,
+              ]}
+            >
+              <Text style={[styles.boxText, isFilled && styles.boxTextFilled]}>
+                {char}
+              </Text>
+            </View>
+          );
+        })}
+      </Pressable>
+
+      {/* Submit Button */}
       <TouchableOpacity
-        style={[styles.myButton, !isComplete && styles.myButtonDisabled]}
-        disabled={!isComplete}
-        onPress={() => onSubmit?.(otp)}
+        style={[
+          styles.submitBtn,
+          (!isComplete || loading) && styles.submitBtnDisabled,
+        ]}
+        disabled={!isComplete || loading}
+        onPress={() => {
+          if (isComplete && !loading) {
+            onSubmit(code);
+          }
+        }}
       >
-        <Text style={styles.buttonText}>Submit</Text>
+        {loading ? (
+          <ActivityIndicator color="#fff" />
+        ) : (
+          <Text style={styles.submitBtnText}>{submitButtonText}</Text>
+        )}
       </TouchableOpacity>
+
+      {/* Resend OTP Section */}
+      {onResend ? (
+        <View style={styles.resendContainer}>
+          {resendCooldown > 0 ? (
+            <View style={styles.cooldownRow}>
+              <Ionicons name="time-outline" size={15} color="#777" />
+              <Text style={styles.cooldownText}>
+                Resend code in{" "}
+                <Text style={{ fontWeight: "bold", color: "#FF8383" }}>
+                  {resendCooldown}s
+                </Text>
+              </Text>
+            </View>
+          ) : (
+            <TouchableOpacity
+              onPress={onResend}
+              disabled={resendLoading}
+              style={styles.resendBtn}
+            >
+              {resendLoading ? (
+                <ActivityIndicator size="small" color="#FF8383" />
+              ) : (
+                <Text style={styles.resendBtnText}>
+                  Didn’t receive code?{" "}
+                  <Text style={styles.resendBtnHighlight}>Resend OTP</Text>
+                </Text>
+              )}
+            </TouchableOpacity>
+          )}
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -90,46 +156,96 @@ export default function OtpInput({ length = 6, onSubmit }: OtpInputProps) {
 const styles = StyleSheet.create({
   container: {
     width: "100%",
-    marginTop: "5%",
+    marginTop: 10,
   },
   label: {
     fontSize: 14,
     fontWeight: "bold",
     color: "#555",
-    marginBottom: 8,
+    marginBottom: 12,
+  },
+  hiddenInput: {
+    position: "absolute",
+    width: "100%",
+    height: 56,
+    opacity: 0,
+    zIndex: 2,
   },
   boxRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     width: "100%",
-    marginTop: 10,
+    marginTop: 4,
+    zIndex: 1,
   },
   box: {
-    width: 45,
-    height: 55,
+    width: 46,
+    height: 54,
     borderWidth: 2,
     borderColor: "#555",
     borderRadius: 8,
-    textAlign: "center",
-    fontSize: 20,
-    color: "#555",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#fff",
+  },
+  boxCurrent: {
+    borderColor: "#FF8383",
+    borderWidth: 2.5,
+    backgroundColor: "#fff5f5",
   },
   boxFilled: {
     borderColor: "#FF8383",
+    backgroundColor: "#fff5f5",
   },
-  myButton: {
+  boxText: {
+    fontSize: 22,
+    fontWeight: "bold",
+    color: "#333",
+  },
+  boxTextFilled: {
+    color: "#111",
+  },
+  submitBtn: {
     backgroundColor: "#FF8383",
-    paddingVertical: 12,
-    paddingHorizontal: 24,
+    paddingVertical: 14,
     borderRadius: 8,
-    marginTop: "15%",
+    marginTop: 24,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  myButtonDisabled: {
+  submitBtnDisabled: {
     opacity: 0.5,
   },
-  buttonText: {
+  submitBtnText: {
     color: "#fff",
     fontSize: 16,
-    textAlign: "center",
+    fontWeight: "bold",
+  },
+  resendContainer: {
+    marginTop: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  cooldownRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  cooldownText: {
+    fontSize: 14,
+    color: "#777",
+  },
+  resendBtn: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+  },
+  resendBtnText: {
+    fontSize: 14,
+    color: "#555",
+  },
+  resendBtnHighlight: {
+    color: "#FF8383",
+    fontWeight: "bold",
+    textDecorationLine: "underline",
   },
 });

@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
 import crypto from 'crypto';
+import bcrypt from 'bcrypt';
 import User from '../models/userModel.ts'
 import sendOtp, { OTP_MAX_ATTEMPTS, OTP_TTL_MS, hashOtp } from '../utils/sendOtp.ts';
 import generateJWT from '../utils/jwtokengenerator.ts';
@@ -35,25 +36,29 @@ export const customSignup = asyncHandler(async (req: Request, res: Response) => 
         return res.status(400).json({ message: "invalid role" });
     }
 
-    const existing = await User.findOne({ $or: [{ username }, { email }] }).select("_id");
+    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedUsername = username.trim();
+
+    const existing = await User.findOne({ $or: [{ username: normalizedUsername }, { email: normalizedEmail }] }).select("_id");
 
     // Responding identically whether or not the identifier is taken keeps
     // signup from confirming which emails and usernames are registered.
     if (!existing) {
+        const hashedPassword = await bcrypt.hash(password, 10);
         await User.create({
-            username,
+            username: normalizedUsername,
             passwordSchema: {
-                password,
+                password: hashedPassword,
             },
-            email,
-            fullName,
+            email: normalizedEmail,
+            fullName: fullName ? String(fullName).trim() : normalizedUsername,
             role
         });
         // The account is already persisted, so a mail-provider failure must not
         // fail the request — that would report an error for a registration that
         // actually succeeded, and the user could never reach verification.
         // They can trigger a fresh code by signing in.
-        await sendOtp(email).catch((error) => {
+        await sendOtp(normalizedEmail).catch((error) => {
             console.error("Signup OTP delivery failed:", error?.message);
         });
     }
@@ -75,10 +80,11 @@ export const verifyOtp = asyncHandler(async (req: Request, res: Response) => {
     }
 
     const submitted = String(otp).trim();
+    const cleanIdentifier = identifier.trim();
     const invalidOtp = { message: "invalid or expired otp" };
 
     const user = await User.findOne({
-        $or: [{ email: identifier }, { username: identifier }]
+        $or: [{ email: cleanIdentifier.toLowerCase() }, { username: cleanIdentifier }]
     });
 
     // Unknown identifier is reported the same as a bad code.
@@ -120,6 +126,31 @@ export const verifyOtp = asyncHandler(async (req: Request, res: Response) => {
     });
 });
 
+export const requestOtp = asyncHandler(async (req: Request, res: Response) => {
+    const { identifier } = req?.body;
+    if (typeof identifier !== "string" || !identifier.trim()) {
+        return res.status(400).json({ message: "Identifier (email or username) is required" });
+    }
+
+    const clean = identifier.trim();
+    const user = await User.findOne({
+        $or: [{ email: clean.toLowerCase() }, { username: clean }]
+    });
+
+    if (user && user.email) {
+        await sendOtp(user.email).catch((err) => {
+            console.error("Direct OTP delivery failed:", err?.message);
+        });
+    }
+
+    // Always respond uniformly to avoid account enumeration
+    return res.status(200).json({
+        message: "If the account exists, a verification code has been sent.",
+        requiresOtp: true,
+        emailVerify: true,
+    });
+});
+
 /**
  * Returns the authenticated user.
  *
@@ -143,8 +174,9 @@ export const login = asyncHandler(async (req: Request, res: Response) => {
             .status(400)
             .json({ message: "Username and password are required" });
     }
+    const cleanIdentifier = identifier.trim();
     const user = await User.findOne({
-        $or: [{ email: identifier }, { username: identifier }]
+        $or: [{ email: cleanIdentifier.toLowerCase() }, { username: cleanIdentifier }]
     });
     if (!user) return res.status(401).json({ message: INVALID_CREDENTIALS });
 
@@ -157,7 +189,22 @@ export const login = asyncHandler(async (req: Request, res: Response) => {
         });
     }
 
-    const validateUser = user.passwordSchema?.password === password;
+    const storedPassword = user.passwordSchema?.password || "";
+    let validateUser = false;
+
+    // Check if stored password is a bcrypt hash
+    if (storedPassword.startsWith("$2a$") || storedPassword.startsWith("$2b$")) {
+        validateUser = await bcrypt.compare(password, storedPassword).catch(() => false);
+    } else {
+        // Fallback for legacy plain-text test accounts and upgrade
+        validateUser = timingSafeEqual(storedPassword, password);
+        if (validateUser) {
+            const rehashed = await bcrypt.hash(password, 10);
+            if (user.passwordSchema) {
+                user.passwordSchema.password = rehashed;
+            }
+        }
+    }
     if (!validateUser) {
         if (user.passwordSchema) {
             const attempts = (user.passwordSchema.attempts ?? 0) + 1;

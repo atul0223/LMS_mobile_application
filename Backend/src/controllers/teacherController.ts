@@ -1,6 +1,9 @@
 import type { Request, Response } from 'express';
 import mongoose from 'mongoose';
 import Course from '../models/courseModel.ts';
+import Video from '../models/videoModel.ts';
+import User from '../models/userModel.ts';
+import { destroyVideo } from '../utils/cloudinaryUploader.ts';
 import asyncHandler from '../utils/asyncHandler.ts';
 
 export const createCourse = asyncHandler(async (req: Request, res: Response) => {
@@ -61,6 +64,21 @@ export const deleteCourse = asyncHandler(async (req: Request, res: Response) => 
     if (_id.toString() !== course.owner.toString()) {
         return res.status(403).json({ message: "course not owned by you" });
     }
+
+    // Clean up all video records and remote Cloudinary assets
+    const courseVideos = await Video.find({ course: courseId }).select("publicId");
+    for (const vid of courseVideos) {
+        if (vid.publicId) {
+            await destroyVideo(vid.publicId).catch(() => {});
+        }
+    }
+    await Video.deleteMany({ course: courseId });
+
+    // Remove deleted course from enrolled courses of users
+    await User.updateMany(
+        { enrolledCources: courseId },
+        { $pull: { enrolledCources: courseId } }
+    ).catch(() => {});
 
     await Course.deleteOne({
         owner: _id,
