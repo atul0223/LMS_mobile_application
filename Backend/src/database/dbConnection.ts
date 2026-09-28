@@ -11,14 +11,26 @@ const dbConnect = async () => {
     await mongoose.connect(db_uri);
     console.log("dbConnected Succesfully");
 
-    // Transparently migrate any remaining legacy scalar OTP fields in the background
+    // Transparently migrate any null or scalar OTP fields to valid subdocument objects
     mongoose.connection.collection('users').updateMany(
-        { otp: { $type: "number" } },
-        { $set: { otp: null } }
-    ).catch(() => {});
-    mongoose.connection.collection('users').updateMany(
-        { otp: { $type: "string" } },
-        { $set: { otp: null } }
+        {
+            $or: [
+                { otp: null },
+                { otp: { $type: "null" } },
+                { otp: { $type: "number" } },
+                { otp: { $type: "string" } }
+            ]
+        },
+        {
+            $set: {
+                otp: {
+                    code: null,
+                    createdAt: new Date(),
+                    attempts: 0,
+                    nextSendAllowedAt: null
+                }
+            }
+        }
     ).catch(() => {});
 };
 export default dbConnect;

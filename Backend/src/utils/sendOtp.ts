@@ -32,6 +32,29 @@ const buildHtml = (otp: string) => `
 const sendOtp = async (email: string): Promise<boolean> => {
   const now = Date.now();
 
+  // Ensure the user's otp field is a valid subdocument object so dot-path updates succeed
+  await User.collection.updateOne(
+    {
+      email,
+      $or: [
+        { otp: null },
+        { otp: { $type: "null" } },
+        { otp: { $type: "string" } },
+        { otp: { $type: "number" } }
+      ]
+    },
+    {
+      $set: {
+        otp: {
+          code: null,
+          createdAt: new Date(),
+          attempts: 0,
+          nextSendAllowedAt: null
+        }
+      }
+    }
+  ).catch(() => {});
+
   // Atomically claim the send slot: the filter only matches when no cooldown
   // is outstanding, so concurrent requests cannot both pass the check.
   const claimed = await User.findOneAndUpdate(
@@ -44,7 +67,7 @@ const sendOtp = async (email: string): Promise<boolean> => {
       ]
     },
     { $set: { "otp.nextSendAllowedAt": new Date(now + OTP_RESEND_COOLDOWN_MS) } },
-    { new: true }
+    { returnDocument: 'after' }
   );
 
   // No match means either the account does not exist or the cooldown is still
