@@ -34,6 +34,7 @@ export default function UploadVideoScreen() {
 
   const [loadingCourses, setLoadingCourses] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -89,9 +90,9 @@ export default function UploadVideoScreen() {
       return;
     }
 
-    if (selectedFile.size && selectedFile.size > 200 * 1024 * 1024) {
-      setError("Video file exceeds the maximum 200MB limit. Please compress or select a smaller file.");
-      showToast("File exceeds 200MB limit", "error");
+    if (selectedFile.size && selectedFile.size > 500 * 1024 * 1024) {
+      setError("Video file exceeds the maximum 500MB limit.");
+      showToast("File exceeds 500MB limit", "error");
       return;
     }
 
@@ -105,17 +106,23 @@ export default function UploadVideoScreen() {
     try {
       setUploading(true);
       setError(null);
+      setUploadProgress(0);
 
-      const res = await uploadTeacherVideo({
-        title: title.trim(),
-        description: description.trim(),
-        courseId: selectedCourseId,
-        orderInCourse: parsedOrder,
-        fileUri: selectedFile.uri,
-        fileName: selectedFile.name || "lesson.mp4",
-        mimeType: selectedFile.mimeType || "video/mp4",
-        file: (selectedFile as any).file,
-      });
+      const res = await uploadTeacherVideo(
+        {
+          title: title.trim(),
+          description: description.trim(),
+          courseId: selectedCourseId,
+          orderInCourse: parsedOrder,
+          fileUri: selectedFile.uri,
+          fileName: selectedFile.name || "lesson.mp4",
+          mimeType: selectedFile.mimeType || "video/mp4",
+          file: (selectedFile as any).file,
+        },
+        (percent) => {
+          setUploadProgress(percent);
+        }
+      );
 
       const targetCourse = courses.find((c) => c._id === selectedCourseId);
       showToast(res.message || "Video processed & uploaded successfully! 🎬", "success");
@@ -133,6 +140,7 @@ export default function UploadVideoScreen() {
       showToast(msg, "error");
     } finally {
       setUploading(false);
+      setUploadProgress(null);
     }
   };
 
@@ -169,7 +177,7 @@ export default function UploadVideoScreen() {
           <View style={styles.card}>
             <Text style={styles.heading}>Lesson Media & Info</Text>
             <Text style={styles.subheading}>
-              Upload MP4/MOV videos for your course curriculum. Cloudinary automatically configures adaptive HLS streaming.
+              Upload MP4/MOV videos up to 500MB for your course curriculum. Cloudinary automatically configures adaptive HLS streaming.
             </Text>
 
             {error ? (
@@ -250,7 +258,7 @@ export default function UploadVideoScreen() {
 
             {/* Video File Picker */}
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Video File *</Text>
+              <Text style={styles.label}>Video File (Max 500MB) *</Text>
               <TouchableOpacity
                 style={styles.pickFileBtn}
                 onPress={handlePickVideo}
@@ -281,6 +289,32 @@ export default function UploadVideoScreen() {
               ) : null}
             </View>
 
+            {/* Upload Progress Bar */}
+            {uploading ? (
+              <View style={styles.progressContainer}>
+                <View style={styles.progressBarBackground}>
+                  <View
+                    style={[
+                      styles.progressBarFill,
+                      { width: `${uploadProgress ?? 0}%` },
+                    ]}
+                  />
+                </View>
+                <View style={styles.progressInfoRow}>
+                  <Text style={styles.progressStatusText}>
+                    {uploadProgress !== null && uploadProgress > 0 && uploadProgress < 100
+                      ? `Uploading: ${uploadProgress}%`
+                      : uploadProgress === 100
+                      ? "Deploying & indexing video..."
+                      : "Connecting to Cloudinary..."}
+                  </Text>
+                  {uploadProgress !== null ? (
+                    <Text style={styles.progressPercentBold}>{uploadProgress}%</Text>
+                  ) : null}
+                </View>
+              </View>
+            ) : null}
+
             {/* Upload Button */}
             <TouchableOpacity
               style={[styles.submitButton, uploading && styles.buttonDisabled]}
@@ -290,7 +324,11 @@ export default function UploadVideoScreen() {
               {uploading ? (
                 <View style={styles.uploadingRow}>
                   <ActivityIndicator color="#fff" style={{ marginRight: 8 }} />
-                  <Text style={styles.submitButtonText}>Processing & Deploying Video...</Text>
+                  <Text style={styles.submitButtonText}>
+                    {uploadProgress !== null && uploadProgress > 0 && uploadProgress < 100
+                      ? `Uploading (${uploadProgress}%)...`
+                      : "Deploying Video..."}
+                  </Text>
                 </View>
               ) : (
                 <Text style={styles.submitButtonText}>Deploy Lesson Video</Text>
@@ -449,6 +487,37 @@ const styles = StyleSheet.create({
   uploadingRow: {
     flexDirection: "row",
     alignItems: "center",
+  },
+  progressContainer: {
+    marginBottom: 16,
+    marginTop: 8,
+  },
+  progressBarBackground: {
+    height: 8,
+    backgroundColor: "#eee",
+    borderRadius: 4,
+    overflow: "hidden",
+  },
+  progressBarFill: {
+    height: "100%",
+    backgroundColor: "#FF8383",
+    borderRadius: 4,
+  },
+  progressInfoRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 6,
+  },
+  progressStatusText: {
+    fontSize: 12,
+    color: "#666",
+    fontWeight: "500",
+  },
+  progressPercentBold: {
+    fontSize: 12,
+    fontWeight: "bold",
+    color: "#FF8383",
   },
   progressNote: {
     fontSize: 12,

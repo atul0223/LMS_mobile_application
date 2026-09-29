@@ -188,21 +188,7 @@ export const videoUpload = asyncHandler(async (req: Request, res: Response): Pro
         }
 
         const fileSizeBytes = req.file.size;
-        let finalInputFile = tempInputFile;
-        const maxSizeBytes = 95 * 1024 * 1024; // 95 MB threshold
-
-        if (fileSizeBytes > maxSizeBytes && rawDurationSeconds > 0) {
-            console.log(`Video size (${(fileSizeBytes / (1024 * 1024)).toFixed(2)} MB) exceeds limit. Compressing to <95MB...`);
-            const compressedFilePath = `${tempInputFile}-compressed.mp4`;
-            try {
-                await compressVideo(tempInputFile, compressedFilePath, rawDurationSeconds, 95);
-                finalInputFile = compressedFilePath;
-                await cleanup(tempInputFile);
-            } catch (compErr) {
-                console.warn('Compression skipped or failed, uploading original:', compErr);
-                finalInputFile = tempInputFile;
-            }
-        }
+        const finalInputFile = tempInputFile;
 
         // 2. Upload video directly to Cloudinary (which handles HLS eager transformation)
         const result = await uploadVideoToCloudinary(finalInputFile, videoId);

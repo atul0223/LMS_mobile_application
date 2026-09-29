@@ -42,7 +42,7 @@ const fileFilter = (req: Request, file: Express.Multer.File, cb: FileFilterCallb
  *
  * Overridable so a larger instance can raise it without a code change.
  */
-const MAX_UPLOAD_MB = Number(process.env.MAX_UPLOAD_MB) || 200;
+const MAX_UPLOAD_MB = Number(process.env.MAX_UPLOAD_MB) || 500;
 
 export const uploadMiddleware = multer({
     storage: storage,

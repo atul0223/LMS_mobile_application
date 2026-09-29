@@ -85,7 +85,7 @@ export const removeStoredToken = async (): Promise<void> => {
 // Generic API caller
 export async function apiRequest<T = any>(
   endpoint: string,
-  options: RequestInit = {}
+  options: RequestInit & { timeoutMs?: number } = {}
 ): Promise<T> {
   const baseUrl = await getBaseUrl();
   const token = await getStoredToken();
@@ -106,8 +106,10 @@ export async function apiRequest<T = any>(
 
   const url = `${baseUrl}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
 
-  // 180s timeout for file uploads, 20s for standard requests
-  const timeoutMs = options.body instanceof FormData ? 180000 : 20000;
+  // 600s for file uploads, 60s for standard requests (to accommodate Render cold start), or caller-specified timeout
+  const timeoutMs =
+    options.timeoutMs ??
+    (options.body instanceof FormData ? 600000 : 60000);
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -333,200 +335,193 @@ export async function getCourseById(
   );
 }
 
-export async function uploadTeacherVideo(
-  payload: FormData | VideoUploadPayload
-): Promise<{ success: boolean; message: string; data: any }> {
-  // On native platforms (iOS/Android), attempt direct Cloudinary upload first via signature to bypass Render proxy timeouts
-  if (Platform.OS !== 'web' && !(payload instanceof FormData) && payload.fileUri) {
-    const appCacheDir = FileSystem.cacheDirectory || FileSystem.documentDirectory;
-    let localFileUri = payload.fileUri;
-    let tempCopiedUri: string | null = null;
+export function uploadFileWithXHR<T = any>(
+  url: string,
+  formData: FormData,
+  onProgress?: (percent: number) => void,
+  headers?: Record<string, string>,
+  timeoutMs: number = 0 // 0 means no timeout — supports long video uploads without socket aborts
+): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', url);
 
-    try {
-      // If the file is not already in the app's sandboxed directory (e.g. content:// or outside cache),
-      // copy it into FileSystem.cacheDirectory so ExponentFileSystem has guaranteed read permission.
-      if (appCacheDir && (!localFileUri.startsWith('file://') || !localFileUri.startsWith(appCacheDir))) {
-        const sanitizedName = (payload.fileName || 'lesson.mp4').replace(/[^a-zA-Z0-9._-]/g, '_');
-        const targetUri = `${appCacheDir}upload_${Date.now()}_${sanitizedName}`;
-        try {
-          await FileSystem.copyAsync({
-            from: localFileUri,
-            to: targetUri,
-          });
-          localFileUri = targetUri;
-          tempCopiedUri = targetUri;
-        } catch (copyErr) {
-          console.warn('FileSystem.copyAsync failed, using original uri:', copyErr);
-        }
-      }
+    xhr.timeout = timeoutMs;
 
-      // 1. Direct Cloudinary upload attempt via signed parameters
-      try {
-        const sigRes = await apiRequest<{
-          signature: string;
-          timestamp: number;
-          publicId: string;
-          apiKey: string;
-          cloudName: string;
-          eager: string;
-        }>(`/teacher/video/signature?courseId=${encodeURIComponent(payload.courseId)}`);
-
-        if (sigRes?.signature && sigRes?.cloudName && sigRes?.apiKey) {
-          const cloudinaryUploadUrl = `https://api.cloudinary.com/v1_1/${sigRes.cloudName}/video/upload`;
-          const cldResult = await FileSystem.uploadAsync(cloudinaryUploadUrl, localFileUri, {
-            httpMethod: 'POST',
-            uploadType: FileSystem.FileSystemUploadType.MULTIPART,
-            fieldName: 'file',
-            mimeType: payload.mimeType || 'video/mp4',
-            parameters: {
-              api_key: sigRes.apiKey,
-              timestamp: String(sigRes.timestamp),
-              signature: sigRes.signature,
-              public_id: sigRes.publicId,
-              type: 'authenticated',
-              eager: sigRes.eager,
-              eager_async: 'true',
-            },
-          });
-
-          if (cldResult.status >= 200 && cldResult.status < 300) {
-            let cldData: any = {};
-            try {
-              cldData = JSON.parse(cldResult.body);
-            } catch {
-              cldData = {};
-            }
-
-            const recordResult = await apiRequest<{ success: boolean; message: string; data: any }>(
-              '/teacher/video/record',
-              {
-                method: 'POST',
-                body: JSON.stringify({
-                  title: payload.title,
-                  description: payload.description || '',
-                  courseId: payload.courseId,
-                  orderInCourse: payload.orderInCourse,
-                  publicId: cldData.public_id || sigRes.publicId,
-                  durationSeconds: cldData.duration || 0,
-                  fileSizeBytes: cldData.bytes || 0,
-                }),
-              }
-            );
-
-            return recordResult;
-          } else {
-            console.warn('Cloudinary direct upload status:', cldResult.status, cldResult.body);
-          }
-        }
-      } catch (directErr: any) {
-        console.warn('Direct Cloudinary upload attempt bypassed:', directErr?.message);
-      }
-
-      // 2. Server proxy fallback via FileSystem.uploadAsync
-      const baseUrl = await getBaseUrl();
-      const token = await getStoredToken();
-      const uploadUrl = `${baseUrl}/teacher/video/upload`;
-
-      const uploadResult = await FileSystem.uploadAsync(uploadUrl, localFileUri, {
-        httpMethod: 'POST',
-        uploadType: FileSystem.FileSystemUploadType.MULTIPART,
-        fieldName: 'mediaFile',
-        mimeType: payload.mimeType || 'video/mp4',
-        parameters: {
-          title: payload.title,
-          description: payload.description || '',
-          courseId: payload.courseId,
-          orderInCourse: String(payload.orderInCourse),
-        },
-        headers: {
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          Accept: 'application/json',
-        },
+    if (headers) {
+      Object.keys(headers).forEach((k) => {
+        xhr.setRequestHeader(k, headers[k]);
       });
+    }
 
-      let resData: any = {};
+    if (xhr.upload && onProgress) {
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable && event.total > 0) {
+          const percent = Math.min(100, Math.round((event.loaded / event.total) * 100));
+          onProgress(percent);
+        }
+      };
+    }
+
+    xhr.onload = () => {
+      let data: any = {};
       try {
-        resData = JSON.parse(uploadResult.body);
+        data = JSON.parse(xhr.responseText);
       } catch {
-        resData = { message: uploadResult.body };
+        data = { message: xhr.responseText };
       }
 
-      if (uploadResult.status < 200 || uploadResult.status >= 300) {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(data as T);
+      } else {
         const errorMsg =
-          resData.message ||
-          resData.error ||
-          `Video upload failed with status ${uploadResult.status}`;
+          data?.error?.message ||
+          data?.message ||
+          data?.error ||
+          `Upload failed with status ${xhr.status}`;
         const err: any = new Error(errorMsg);
-        err.status = uploadResult.status;
-        err.data = resData;
-        throw err;
+        err.status = xhr.status;
+        err.data = data;
+        reject(err);
       }
+    };
 
-      return resData;
-    } catch (uploadErr: any) {
-      console.warn('Native upload failed, trying standard FormData fallback:', uploadErr?.message);
-      try {
-        const fallbackFormData = new FormData();
-        fallbackFormData.append('title', payload.title);
-        if (payload.description) fallbackFormData.append('description', payload.description);
-        fallbackFormData.append('courseId', payload.courseId);
-        fallbackFormData.append('orderInCourse', String(payload.orderInCourse));
-        // React Native compatible file descriptor
-        fallbackFormData.append('mediaFile', {
-          uri: localFileUri,
-          name: payload.fileName || 'lesson.mp4',
-          type: payload.mimeType || 'video/mp4',
-        } as any);
+    xhr.onerror = () => {
+      reject(new Error('Network error during video upload. Please check your internet connection.'));
+    };
 
+    xhr.ontimeout = () => {
+      reject(new Error('Upload timed out. Please try again with a stable connection.'));
+    };
+
+    xhr.onabort = () => {
+      reject(new Error('Upload was cancelled.'));
+    };
+
+    xhr.send(formData);
+  });
+}
+
+export async function uploadTeacherVideo(
+  payload: FormData | VideoUploadPayload,
+  onProgress?: (percent: number) => void
+): Promise<{ success: boolean; message: string; data: any }> {
+  if (!(payload instanceof FormData) && payload.fileUri) {
+    let localFileUri = payload.fileUri;
+    const token = await getStoredToken();
+
+    // 1. Direct Cloudinary upload attempt via signed parameters
+    try {
+      const sigRes = await apiRequest<{
+        signature: string;
+        timestamp: number;
+        publicId: string;
+        apiKey: string;
+        cloudName: string;
+        eager: string;
+      }>(
+        `/teacher/video/signature?courseId=${encodeURIComponent(payload.courseId)}`,
+        { timeoutMs: 90000 }
+      );
+
+      if (sigRes?.signature && sigRes?.cloudName && sigRes?.apiKey) {
+        const cloudinaryUploadUrl = `https://api.cloudinary.com/v1_1/${sigRes.cloudName}/video/upload`;
+        const cldFormData = new FormData();
+
+        if (Platform.OS === 'web' && payload.file) {
+          cldFormData.append('file', payload.file);
+        } else {
+          cldFormData.append('file', {
+            uri: localFileUri,
+            name: payload.fileName || 'lesson.mp4',
+            type: payload.mimeType || 'video/mp4',
+          } as any);
+        }
+
+        cldFormData.append('api_key', sigRes.apiKey);
+        cldFormData.append('timestamp', String(sigRes.timestamp));
+        cldFormData.append('signature', sigRes.signature);
+        cldFormData.append('public_id', sigRes.publicId);
+        cldFormData.append('type', 'authenticated');
+        cldFormData.append('eager', sigRes.eager);
+        cldFormData.append('eager_async', 'true');
+
+        // Streaming upload directly to Cloudinary without timeout
+        const cldData = await uploadFileWithXHR<any>(
+          cloudinaryUploadUrl,
+          cldFormData,
+          onProgress,
+          undefined,
+          0 // 0 = no timeout!
+        );
+
+        // Record the uploaded video metadata in MongoDB
         return await apiRequest<{ success: boolean; message: string; data: any }>(
-          '/teacher/video/upload',
+          '/teacher/video/record',
           {
             method: 'POST',
-            body: fallbackFormData,
+            body: JSON.stringify({
+              title: payload.title,
+              description: payload.description || '',
+              courseId: payload.courseId,
+              orderInCourse: payload.orderInCourse,
+              publicId: cldData.public_id || sigRes.publicId,
+              durationSeconds: cldData.duration || 0,
+              fileSizeBytes: cldData.bytes || 0,
+            }),
+            timeoutMs: 90000,
           }
         );
-      } catch (fallbackErr: any) {
-        throw new Error(uploadErr?.message || fallbackErr?.message || 'Video upload failed');
       }
-    } finally {
-      if (tempCopiedUri) {
-        await FileSystem.deleteAsync(tempCopiedUri, { idempotent: true }).catch(() => {});
+    } catch (directErr: any) {
+      console.warn('Direct Cloudinary upload failed or bypassed:', directErr?.message);
+      if (
+        directErr?.message?.includes('exceeds maximum allowed size') ||
+        directErr?.message?.includes('Unsupported video format')
+      ) {
+        throw directErr;
       }
     }
-  }
 
-  // Web or FormData fallback
-  let body: FormData;
-  if (payload instanceof FormData) {
-    body = payload;
-  } else {
-    body = new FormData();
-    body.append('title', payload.title);
-    if (payload.description) body.append('description', payload.description);
-    body.append('courseId', payload.courseId);
-    body.append('orderInCourse', String(payload.orderInCourse));
+    // 2. Server proxy fallback via uploadFileWithXHR (no timeout)
+    const baseUrl = await getBaseUrl();
+    const uploadUrl = `${baseUrl}/teacher/video/upload`;
+    const serverFormData = new FormData();
+    serverFormData.append('title', payload.title);
+    if (payload.description) serverFormData.append('description', payload.description);
+    serverFormData.append('courseId', payload.courseId);
+    serverFormData.append('orderInCourse', String(payload.orderInCourse));
 
-    if (payload.file) {
-      body.append('mediaFile', payload.file);
-    } else if (Platform.OS === 'web') {
-      const blobRes = await fetch(payload.fileUri);
-      const blob = await blobRes.blob();
-      body.append('mediaFile', blob, payload.fileName || 'lesson.mp4');
+    if (Platform.OS === 'web' && payload.file) {
+      serverFormData.append('mediaFile', payload.file);
     } else {
-      body.append('mediaFile', {
-        uri: payload.fileUri,
+      serverFormData.append('mediaFile', {
+        uri: localFileUri,
         name: payload.fileName || 'lesson.mp4',
         type: payload.mimeType || 'video/mp4',
       } as any);
     }
+
+    return await uploadFileWithXHR<{ success: boolean; message: string; data: any }>(
+      uploadUrl,
+      serverFormData,
+      onProgress,
+      token ? { Authorization: `Bearer ${token}` } : undefined,
+      0 // No timeout!
+    );
   }
 
-  return apiRequest<{ success: boolean; message: string; data: any }>(
-    '/teacher/video/upload',
-    {
-      method: 'POST',
-      body,
-    }
+  // Web fallback with payload as FormData
+  const baseUrl = await getBaseUrl();
+  const token = await getStoredToken();
+  const uploadUrl = `${baseUrl}/teacher/video/upload`;
+
+  return await uploadFileWithXHR<{ success: boolean; message: string; data: any }>(
+    uploadUrl,
+    payload as FormData,
+    onProgress,
+    token ? { Authorization: `Bearer ${token}` } : undefined,
+    0
   );
 }
 
