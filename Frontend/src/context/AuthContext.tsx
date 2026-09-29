@@ -29,6 +29,7 @@ interface AuthContextType {
   sendUserOtp: (identifier: string) => Promise<{ message: string; requiresOtp?: boolean }>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<User | null>;
+  setUserProfile: (user: User) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -132,6 +133,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return null;
   };
 
+  const setUserProfile = (updatedUser: User) => {
+    setUser(updatedUser);
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -146,6 +151,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         sendUserOtp,
         logout,
         refreshUser,
+        setUserProfile,
       }}
     >
       {children}

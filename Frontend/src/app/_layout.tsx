@@ -39,6 +39,7 @@ export default function RootLayout() {
                 presentation: "modal",
               }}
             />
+            <Stack.Screen name="profileupdation" options={{ headerShown: false }} />
             <Stack.Screen name="homepage/index" options={{ headerShown: false }} />
           </Stack>
         </ThemeProvider>

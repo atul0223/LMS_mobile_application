@@ -7,8 +7,10 @@ import {
   Course,
   CourseFeedResponse,
   CourseVideosResponse,
+  ProfilePicResponse,
   SingleVideoResponse,
   TeacherCoursesResponse,
+  UpdateProfileResponse,
   User,
   VideoUploadPayload,
 } from '../types/api';
@@ -463,5 +465,113 @@ export async function getVideoById(
 ): Promise<SingleVideoResponse> {
   return apiRequest<SingleVideoResponse>(`/videos/${videoId}`, {
     method: 'GET',
+  });
+}
+
+// ----------------- Profile Management Endpoints -----------------
+
+export async function uploadProfilePicture(
+  fileUri: string,
+  fileName?: string,
+  mimeType?: string
+): Promise<ProfilePicResponse> {
+  const baseUrl = await getBaseUrl();
+  const token = await getStoredToken();
+  const uploadUrl = `${baseUrl}/user/profilePic`;
+
+  if (Platform.OS !== 'web') {
+    const appCacheDir = FileSystem.cacheDirectory || FileSystem.documentDirectory;
+    let localFileUri = fileUri;
+    let tempCopiedUri: string | null = null;
+
+    try {
+      if (appCacheDir && (!localFileUri.startsWith('file://') || !localFileUri.startsWith(appCacheDir))) {
+        const sanitizedName = (fileName || 'profile.jpg').replace(/[^a-zA-Z0-9._-]/g, '_');
+        const targetUri = `${appCacheDir}profile_${Date.now()}_${sanitizedName}`;
+        try {
+          await FileSystem.copyAsync({
+            from: localFileUri,
+            to: targetUri,
+          });
+          localFileUri = targetUri;
+          tempCopiedUri = targetUri;
+        } catch (copyErr) {
+          console.warn('FileSystem.copyAsync failed for profile pic:', copyErr);
+        }
+      }
+
+      const uploadResult = await FileSystem.uploadAsync(uploadUrl, localFileUri, {
+        httpMethod: 'POST',
+        uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+        fieldName: 'profilePic',
+        mimeType: mimeType || 'image/jpeg',
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          Accept: 'application/json',
+        },
+      });
+
+      let resData: any = {};
+      try {
+        resData = JSON.parse(uploadResult.body);
+      } catch {
+        resData = { message: uploadResult.body };
+      }
+
+      if (uploadResult.status < 200 || uploadResult.status >= 300) {
+        const errorMsg =
+          resData.message ||
+          resData.error ||
+          `Upload failed with status ${uploadResult.status}`;
+        const err: any = new Error(errorMsg);
+        err.status = uploadResult.status;
+        err.data = resData;
+        throw err;
+      }
+
+      return resData as ProfilePicResponse;
+    } catch (uploadErr: any) {
+      console.warn('Native uploadAsync failed for profile pic, attempting Blob fallback:', uploadErr?.message);
+      try {
+        const blobRes = await fetch(fileUri);
+        const blob = await blobRes.blob();
+        const fallbackFormData = new FormData();
+        fallbackFormData.append('profilePic', blob, fileName || 'profile.jpg');
+
+        return await apiRequest<ProfilePicResponse>(
+          '/user/profilePic',
+          {
+            method: 'POST',
+            body: fallbackFormData,
+          }
+        );
+      } catch (fallbackErr: any) {
+        throw new Error(uploadErr?.message || fallbackErr?.message || 'Profile picture upload failed');
+      }
+    } finally {
+      if (tempCopiedUri) {
+        await FileSystem.deleteAsync(tempCopiedUri, { idempotent: true }).catch(() => {});
+      }
+    }
+  }
+
+  // Web fallback
+  const blobRes = await fetch(fileUri);
+  const blob = await blobRes.blob();
+  const formData = new FormData();
+  formData.append('profilePic', blob, fileName || 'profile.jpg');
+  return apiRequest<ProfilePicResponse>('/user/profilePic', {
+    method: 'POST',
+    body: formData,
+  });
+}
+
+export async function updateUserProfile(payload: {
+  fullName?: string;
+  username?: string;
+}): Promise<UpdateProfileResponse> {
+  return apiRequest<UpdateProfileResponse>('/user/profile', {
+    method: 'PUT',
+    body: JSON.stringify(payload),
   });
 }

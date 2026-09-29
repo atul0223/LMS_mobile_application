@@ -1,46 +1,57 @@
 import React, { useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Image,
-  Modal,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import * as DocumentPicker from "expo-document-picker";
 import StudentSVG from "../../../assets/images/student.svg";
 import { useAuth } from "../../context/AuthContext";
 import { useToast } from "../../components/Toast";
-import { getBaseUrl, setCustomBaseUrl } from "../../services/api";
+import { uploadProfilePicture } from "../../services/api";
 
 export default function ProfileScreen() {
-  const { user, logout, role } = useAuth();
+  const { user, logout, role, setUserProfile } = useAuth();
   const { showToast } = useToast();
 
-  const [apiUrlModalVisible, setApiUrlModalVisible] = useState(false);
-  const [currentApiUrl, setCurrentApiUrl] = useState("");
-  const [newApiUrl, setNewApiUrl] = useState("");
+  const [uploadingPic, setUploadingPic] = useState(false);
 
-  const handleOpenApiModal = async () => {
-    const url = await getBaseUrl();
-    setCurrentApiUrl(url);
-    setNewApiUrl(url);
-    setApiUrlModalVisible(true);
-  };
+  const handlePickAndUploadPic = async () => {
+    try {
+      const res = await DocumentPicker.getDocumentAsync({
+        type: ["image/*"],
+        copyToCacheDirectory: false,
+      });
 
-  const handleSaveApiUrl = async () => {
-    if (!newApiUrl.trim().startsWith("http")) {
-      showToast("API URL must begin with http:// or https://", "error");
-      return;
+      if (!res.canceled && res.assets && res.assets.length > 0) {
+        const file = res.assets[0];
+        setUploadingPic(true);
+
+        const uploadRes = await uploadProfilePicture(
+          file.uri,
+          file.name || "profile.jpg",
+          file.mimeType || "image/jpeg"
+        );
+
+        if (uploadRes?.user) {
+          setUserProfile(uploadRes.user);
+        }
+        showToast(uploadRes.message || "Profile picture updated! 📸", "success");
+      }
+    } catch (err: any) {
+      console.error("Profile picture upload error:", err);
+      showToast(err.message || "Failed to update profile picture", "error");
+    } finally {
+      setUploadingPic(false);
     }
-    await setCustomBaseUrl(newApiUrl.trim());
-    showToast("API Endpoint updated!", "success");
-    setApiUrlModalVisible(false);
   };
 
   const handleLogout = () => {
@@ -65,16 +76,47 @@ export default function ProfileScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        <Text style={styles.pageTitle}>My Profile</Text>
+        {/* Top Header with Title and Settings Button */}
+        <View style={styles.pageHeaderRow}>
+          <Text style={styles.pageTitle}>My Profile</Text>
+          <TouchableOpacity
+            style={styles.settingsHeaderBtn}
+            onPress={() => router.push("/profileupdation")}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="settings-outline" size={24} color="#333" />
+          </TouchableOpacity>
+        </View>
 
         {/* Profile Card */}
         <View style={styles.profileCard}>
-          <View style={styles.avatarWrapper}>
-            {user?.profilePic ? (
-              <Image source={{ uri: user.profilePic }} style={styles.avatarImg} />
-            ) : (
-              <StudentSVG width="100%" height="100%" />
-            )}
+          <View style={styles.avatarOuterWrapper}>
+            <TouchableOpacity
+              style={styles.avatarWrapper}
+              onPress={handlePickAndUploadPic}
+              disabled={uploadingPic}
+              activeOpacity={0.8}
+            >
+              {user?.profilePic ? (
+                <Image source={{ uri: user.profilePic }} style={styles.avatarImg} />
+              ) : (
+                <StudentSVG width="100%" height="100%" />
+              )}
+              {uploadingPic ? (
+                <View style={styles.avatarOverlay}>
+                  <ActivityIndicator color="#fff" size="small" />
+                </View>
+              ) : null}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.cameraBadge}
+              onPress={handlePickAndUploadPic}
+              disabled={uploadingPic}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="camera" size={14} color="#fff" />
+            </TouchableOpacity>
           </View>
 
           <View style={styles.profileInfo}>
@@ -117,6 +159,21 @@ export default function ProfileScreen() {
         <View style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>Account Options</Text>
 
+          {/* Edit Profile & Settings */}
+          <TouchableOpacity
+            style={styles.menuItem}
+            onPress={() => router.push("/profileupdation")}
+          >
+            <View style={styles.menuIconBox}>
+              <Ionicons name="person-circle-outline" size={22} color="#FF8383" />
+            </View>
+            <View style={styles.menuTextBox}>
+              <Text style={styles.menuLabel}>Edit Profile & Settings</Text>
+              <Text style={styles.menuSub}>Update your name, username and photo</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color="#999" />
+          </TouchableOpacity>
+
           {isTeacher ? (
             <TouchableOpacity
               style={styles.menuItem}
@@ -149,20 +206,6 @@ export default function ProfileScreen() {
 
           <TouchableOpacity
             style={styles.menuItem}
-            onPress={handleOpenApiModal}
-          >
-            <View style={styles.menuIconBox}>
-              <Ionicons name="server-outline" size={20} color="#555" />
-            </View>
-            <View style={styles.menuTextBox}>
-              <Text style={styles.menuLabel}>Backend Endpoint Config</Text>
-              <Text style={styles.menuSub}>Change local IP or server URL</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color="#999" />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.menuItem}
             onPress={() =>
               Alert.alert(
                 "LMS Platform",
@@ -187,55 +230,6 @@ export default function ProfileScreen() {
           <Text style={styles.logoutBtnText}>Sign Out</Text>
         </TouchableOpacity>
       </ScrollView>
-
-      {/* API Config Modal */}
-      <Modal
-        visible={apiUrlModalVisible}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setApiUrlModalVisible(false)}
-      >
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalSheet}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Backend API Configuration</Text>
-              <TouchableOpacity onPress={() => setApiUrlModalVisible(false)}>
-                <Ionicons name="close" size={22} color="#555" />
-              </TouchableOpacity>
-            </View>
-
-            <Text style={styles.modalSub}>
-              Current Base URL: <Text style={{ fontWeight: "bold" }}>{currentApiUrl}</Text>
-            </Text>
-
-            <Text style={styles.modalLabel}>New Base URL:</Text>
-            <TextInput
-              style={styles.modalTextInput}
-              value={newApiUrl}
-              onChangeText={setNewApiUrl}
-              placeholder="https://lms-backend-bc8d.onrender.com"
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-
-            <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={styles.modalCancelBtn}
-                onPress={() => setApiUrlModalVisible(false)}
-              >
-                <Text style={styles.modalCancelText}>Cancel</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.modalSaveBtn}
-                onPress={handleSaveApiUrl}
-              >
-                <Text style={styles.modalSaveText}>Save Endpoint</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
     </SafeAreaView>
   );
 }
@@ -249,11 +243,24 @@ const styles = StyleSheet.create({
     padding: 16,
     paddingBottom: 40,
   },
+  pageHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 16,
+  },
   pageTitle: {
     fontSize: 26,
     fontWeight: "bold",
     color: "#222",
-    marginBottom: 16,
+  },
+  settingsHeaderBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#f5f5f5",
+    justifyContent: "center",
+    alignItems: "center",
   },
   profileCard: {
     flexDirection: "row",
@@ -265,21 +272,47 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 16,
   },
+  avatarOuterWrapper: {
+    position: "relative",
+    marginRight: 14,
+  },
   avatarWrapper: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 72,
+    height: 72,
+    borderRadius: 36,
     backgroundColor: "#f5ecec",
     borderWidth: 1.5,
     borderColor: "#555",
     overflow: "hidden",
-    marginRight: 14,
     justifyContent: "center",
     alignItems: "center",
   },
   avatarImg: {
     width: "100%",
     height: "100%",
+  },
+  avatarOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  cameraBadge: {
+    position: "absolute",
+    bottom: -2,
+    right: -2,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "#FF8383",
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 2,
+    borderColor: "#fff",
   },
   profileInfo: {
     flex: 1,
@@ -421,75 +454,5 @@ const styles = StyleSheet.create({
     color: "#d93025",
     fontWeight: "bold",
     fontSize: 15,
-  },
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    justifyContent: "center",
-    padding: 20,
-  },
-  modalSheet: {
-    backgroundColor: "#fff",
-    borderRadius: 14,
-    padding: 20,
-    borderWidth: 2,
-    borderColor: "#555",
-  },
-  modalHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 10,
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#333",
-  },
-  modalSub: {
-    fontSize: 13,
-    color: "#666",
-    marginBottom: 14,
-  },
-  modalLabel: {
-    fontSize: 13,
-    fontWeight: "bold",
-    color: "#555",
-    marginBottom: 6,
-  },
-  modalTextInput: {
-    borderWidth: 1.5,
-    borderColor: "#555",
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 14,
-  },
-  modalActions: {
-    flexDirection: "row",
-    justifyContent: "flex-end",
-    gap: 12,
-    marginTop: 20,
-  },
-  modalCancelBtn: {
-    paddingVertical: 9,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#555",
-  },
-  modalCancelText: {
-    color: "#555",
-    fontWeight: "600",
-  },
-  modalSaveBtn: {
-    backgroundColor: "#FF8383",
-    paddingVertical: 9,
-    paddingHorizontal: 18,
-    borderRadius: 8,
-  },
-  modalSaveText: {
-    color: "#fff",
-    fontWeight: "bold",
   },
 });

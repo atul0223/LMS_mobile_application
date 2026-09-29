@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import {
   FlatList,
+  Image,
   RefreshControl,
   StyleSheet,
   Text,
@@ -13,12 +14,13 @@ import { Ionicons } from "@expo/vector-icons";
 import Card from "../../components/Card";
 import { CourseCardSkeleton } from "../../components/Skeleton";
 import { useToast } from "../../components/Toast";
+import StudentSVG from "../../../assets/images/student.svg";
 import { getCourseFeed } from "../../services/api";
 import { Course } from "../../types/api";
 import { useAuth } from "../../context/AuthContext";
 
 export default function MyLearningScreen() {
-  const { isAuthenticated } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   const { showToast } = useToast();
   const [courses, setCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true);
@@ -78,10 +80,25 @@ export default function MyLearningScreen() {
         }
         ListHeaderComponent={
           <View style={styles.header}>
-            <Text style={styles.title}>My Learning 📚</Text>
-            <Text style={styles.subtitle}>
-              {courses.length} enrolled course{courses.length === 1 ? "" : "s"}
-            </Text>
+            <View style={styles.headerRow}>
+              <View style={{ flex: 1, marginRight: 12 }}>
+                <Text style={styles.title}>My Learning 📚</Text>
+                <Text style={styles.subtitle}>
+                  {courses.length} enrolled course{courses.length === 1 ? "" : "s"}
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => router.push("/(tabs)/profile")}
+                style={styles.headerAvatarBtn}
+                activeOpacity={0.8}
+              >
+                {user?.profilePic ? (
+                  <Image source={{ uri: user.profilePic }} style={styles.headerAvatarImg} />
+                ) : (
+                  <StudentSVG width="100%" height="100%" />
+                )}
+              </TouchableOpacity>
+            </View>
           </View>
         }
         ListEmptyComponent={
@@ -122,6 +139,26 @@ const styles = StyleSheet.create({
   },
   header: {
     marginBottom: 16,
+  },
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  headerAvatarBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 1.5,
+    borderColor: "#FF8383",
+    overflow: "hidden",
+    backgroundColor: "#fff5f5",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  headerAvatarImg: {
+    width: "100%",
+    height: "100%",
   },
   title: {
     fontSize: 26,

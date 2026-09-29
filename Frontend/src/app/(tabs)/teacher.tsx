@@ -16,6 +16,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { CourseCardSkeleton } from "../../components/Skeleton";
+import StudentSVG from "../../../assets/images/student.svg";
 import { useAuth } from "../../context/AuthContext";
 import { useToast } from "../../components/Toast";
 import {
@@ -143,12 +144,23 @@ export default function TeacherTabScreen() {
           <>
             {/* Header */}
             <View style={styles.headerRow}>
-              <View>
+              <View style={{ flex: 1, marginRight: 12 }}>
                 <Text style={styles.title}>Teacher Studio 👨‍🏫</Text>
                 <Text style={styles.subtitle}>
                   Manage your educational content & track students
                 </Text>
               </View>
+              <TouchableOpacity
+                onPress={() => router.push("/(tabs)/profile")}
+                style={styles.headerAvatarBtn}
+                activeOpacity={0.8}
+              >
+                {user?.profilePic ? (
+                  <Image source={{ uri: user.profilePic }} style={styles.headerAvatarImg} />
+                ) : (
+                  <StudentSVG width="100%" height="100%" />
+                )}
+              </TouchableOpacity>
             </View>
 
             {/* Metrics Dashboard Banner */}
@@ -367,7 +379,25 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     marginBottom: 16,
+  },
+  headerAvatarBtn: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    borderWidth: 1.5,
+    borderColor: "#FF8383",
+    overflow: "hidden",
+    backgroundColor: "#fff5f5",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  headerAvatarImg: {
+    width: "100%",
+    height: "100%",
   },
   title: {
     fontSize: 26,

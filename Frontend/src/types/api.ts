@@ -88,3 +88,14 @@ export interface SingleVideoResponse {
   message: string;
   video: Video;
 }
+
+export interface ProfilePicResponse {
+  message: string;
+  profilePic: string;
+  user: User;
+}
+
+export interface UpdateProfileResponse {
+  message: string;
+  user: User;
+}
