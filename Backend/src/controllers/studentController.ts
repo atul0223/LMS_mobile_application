@@ -162,9 +162,6 @@ const searchCourses = asyncHandler(async (req: Request, res: Response) => {
     if (!user) {
         return res.status(401).json({ message: "please login first" });
     }
-    if (user.role !== "student") {
-        return res.status(403).json({ message: "not a valid role for this action" });
-    }
     if (!user.isVerified) {
         return res.status(403).json({ message: "user not verified" });
     }
@@ -262,9 +259,6 @@ const getCourseFeed = asyncHandler(async (req: Request, res: Response) => {
     if (!user) {
         return res.status(401).json({ message: "please login first" });
     }
-    if (user.role !== "student") {
-        return res.status(403).json({ message: "not a valid role for this action" });
-    }
     if (!user.isVerified) {
         return res.status(403).json({ message: "user not verified" });
     }
@@ -340,4 +334,37 @@ const getCourseFeed = asyncHandler(async (req: Request, res: Response) => {
     }
 });
 
-export { purchaseCourse, searchCourses, getCourseFeed };
+const getCourseById = asyncHandler(async (req: Request, res: Response) => {
+    const user = req.user;
+    if (!user) {
+        return res.status(401).json({ message: "please login first" });
+    }
+    if (!user.isVerified) {
+        return res.status(403).json({ message: "user not verified" });
+    }
+    const { courseId } = req.params;
+    if (!courseId || !mongoose.isValidObjectId(courseId)) {
+        return res.status(400).json({ message: "invalid course id" });
+    }
+
+    const course = await Course.findById(courseId)
+        .populate("owner", "username fullName profilePic email");
+    if (!course) {
+        return res.status(404).json({ message: "course not found" });
+    }
+
+    const isOwner = course.owner && ((course.owner as any)._id?.toString() === user._id.toString() || course.owner.toString() === user._id.toString());
+    const isEnrolled = isOwner || (user.enrolledCources || []).some(
+        (id) => id.toString() === course._id.toString()
+    );
+
+    return res.status(200).json({
+        message: "Course fetched successfully",
+        course: {
+            ...course.toObject(),
+            isEnrolled: !!isEnrolled
+        }
+    });
+});
+
+export { purchaseCourse, searchCourses, getCourseFeed, getCourseById };

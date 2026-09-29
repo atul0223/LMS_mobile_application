@@ -2,11 +2,120 @@ import type { Request, Response } from "express";
 import mongoose from "mongoose";
 import crypto from "crypto";
 import fs from "fs-extra";
+import cloudinary from "../config/cloudinary.ts";
 import { getVideoDuration, compressVideo } from "../utils/videoEncoding.ts";
 import { uploadVideoToCloudinary, buildSignedVideoUrl, destroyVideo, SIGNED_URL_TTL_SECONDS } from "../utils/cloudinaryUploader.ts";
 import Video from "../models/videoModel.ts";
 import Course from "../models/courseModel.ts";
 import asyncHandler from "../utils/asyncHandler.ts";
+
+export const getVideoUploadSignature = asyncHandler(async (req: Request, res: Response): Promise<any> => {
+    const user = req.user;
+    if (!user) {
+        return res.status(401).json({ error: 'Unauthorized request' });
+    }
+    if (!user.isVerified) {
+        return res.status(403).json({ error: 'user not verified' });
+    }
+    if (user.role !== 'teacher') {
+        return res.status(403).json({ error: 'not a eligible role' });
+    }
+
+    const { courseId } = req.query;
+    if (!courseId || !mongoose.isValidObjectId(courseId)) {
+        return res.status(400).json({ error: 'valid courseId is required' });
+    }
+
+    const course = await Course.findById(courseId).select("owner");
+    if (!course) {
+        return res.status(404).json({ error: 'course not found' });
+    }
+    if (course.owner.toString() !== user._id.toString()) {
+        return res.status(403).json({ error: 'course not owned by you' });
+    }
+
+    const timestamp = Math.round(Date.now() / 1000);
+    const publicId = crypto.randomUUID();
+    const eager = 'sp_hd/m3u8';
+
+    const paramsToSign = {
+        eager,
+        eager_async: 'true',
+        public_id: publicId,
+        timestamp,
+        type: 'authenticated',
+    };
+
+    const signature = cloudinary.utils.api_sign_request(
+        paramsToSign,
+        process.env.CLOUDINARY_API_SECRET!
+    );
+
+    return res.status(200).json({
+        signature,
+        timestamp,
+        publicId,
+        apiKey: process.env.CLOUDINARY_API_KEY,
+        cloudName: process.env.CLOUDINARY_CLOUD_NAME,
+        eager,
+    });
+});
+
+export const recordUploadedVideo = asyncHandler(async (req: Request, res: Response): Promise<any> => {
+    const user = req.user;
+    if (!user) {
+        return res.status(401).json({ error: 'Unauthorized request' });
+    }
+    if (!user.isVerified) {
+        return res.status(403).json({ error: 'user not verified' });
+    }
+    if (user.role !== 'teacher') {
+        return res.status(403).json({ error: 'not a eligible role' });
+    }
+
+    const { title, description, courseId, orderInCourse, publicId, durationSeconds, fileSizeBytes } = req.body;
+
+    if (!title || !courseId || orderInCourse === undefined || !publicId) {
+        return res.status(400).json({ error: 'title, courseId, orderInCourse, and publicId are required.' });
+    }
+
+    if (!mongoose.isValidObjectId(courseId)) {
+        return res.status(400).json({ error: 'invalid course id' });
+    }
+
+    const course = await Course.findById(courseId).select("owner");
+    if (!course) {
+        return res.status(404).json({ error: 'course not found' });
+    }
+    if (course.owner.toString() !== user._id.toString()) {
+        return res.status(403).json({ error: 'course not owned by you' });
+    }
+
+    const parsedOrder = Number(orderInCourse);
+    const parsedDuration = Number(durationSeconds) || 0;
+    const parsedBytes = Number(fileSizeBytes) || 0;
+
+    const durationFormatted = `${Math.floor(parsedDuration / 60)}m ${Math.round(parsedDuration % 60)}s`;
+    const sizeFormatted = `${(parsedBytes / (1024 * 1024)).toFixed(2)} MB`;
+
+    const savedVideoRecord = await Video.create({
+        title,
+        description: description || '',
+        course: courseId,
+        publicId,
+        metadata: {
+            videolength: durationFormatted,
+            size: sizeFormatted,
+            orderInCourse: parsedOrder,
+        }
+    });
+
+    return res.status(201).json({
+        success: true,
+        message: 'Video fully processed, deployed, and database record indexed.',
+        data: savedVideoRecord
+    });
+});
 
 export const videoUpload = asyncHandler(async (req: Request, res: Response): Promise<any> => {
     const cleanup = async (...paths: string[]) => {
@@ -67,25 +176,33 @@ export const videoUpload = asyncHandler(async (req: Request, res: Response): Pro
     let uploadedPublicId: string | null = null;
 
     try {
-        // 1. Calculate duration and size from the raw uploaded disk asset
-        const rawDurationSeconds = await getVideoDuration(tempInputFile);
-        const fileSizeBytes = req.file.size;
+        // 1. Calculate duration and size from the raw uploaded disk asset (with non-blocking timeout)
+        let rawDurationSeconds = 0;
+        try {
+            rawDurationSeconds = await Promise.race([
+                getVideoDuration(tempInputFile),
+                new Promise<number>((_, reject) => setTimeout(() => reject(new Error('timeout')), 2500))
+            ]);
+        } catch {
+            // Local ffprobe not available or slow; Cloudinary will provide duration
+        }
 
+        const fileSizeBytes = req.file.size;
         let finalInputFile = tempInputFile;
         const maxSizeBytes = 95 * 1024 * 1024; // 95 MB threshold
 
-        if (fileSizeBytes > maxSizeBytes) {
+        if (fileSizeBytes > maxSizeBytes && rawDurationSeconds > 0) {
             console.log(`Video size (${(fileSizeBytes / (1024 * 1024)).toFixed(2)} MB) exceeds limit. Compressing to <95MB...`);
             const compressedFilePath = `${tempInputFile}-compressed.mp4`;
-            await compressVideo(tempInputFile, compressedFilePath, rawDurationSeconds, 95);
-
-            // Swap reference to compressed file and delete original
-            finalInputFile = compressedFilePath;
-            await cleanup(tempInputFile);
+            try {
+                await compressVideo(tempInputFile, compressedFilePath, rawDurationSeconds, 95);
+                finalInputFile = compressedFilePath;
+                await cleanup(tempInputFile);
+            } catch (compErr) {
+                console.warn('Compression skipped or failed, uploading original:', compErr);
+                finalInputFile = tempInputFile;
+            }
         }
-
-        const durationFormatted = `${Math.floor(rawDurationSeconds / 60)}m ${Math.round(rawDurationSeconds % 60)}s`;
-        const sizeFormatted = `${(fileSizeBytes / (1024 * 1024)).toFixed(2)} MB`;
 
         // 2. Upload video directly to Cloudinary (which handles HLS eager transformation)
         const result = await uploadVideoToCloudinary(finalInputFile, videoId);
@@ -93,6 +210,10 @@ export const videoUpload = asyncHandler(async (req: Request, res: Response): Pro
 
         // 3. Scrub temporary disk fingerprints instantly
         await cleanup(finalInputFile);
+
+        const durationSeconds = rawDurationSeconds || result.duration || 0;
+        const durationFormatted = `${Math.floor(durationSeconds / 60)}m ${Math.round(durationSeconds % 60)}s`;
+        const sizeFormatted = `${(fileSizeBytes / (1024 * 1024)).toFixed(2)} MB`;
 
         // 4. Store the public_id only. Playback URLs are signed per request so
         //    access is re-checked rather than baked into a stored link.

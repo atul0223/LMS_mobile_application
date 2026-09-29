@@ -15,7 +15,6 @@
   },
   "dependencies": {
     "axios": "^1.19.0",
-    "bcrypt": "^6.0.0",
     "cloudinary": "^2.10.1",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
@@ -29,7 +28,6 @@
     "multer": "^2.2.0"
   },
   "devDependencies": {
-    "@types/bcrypt": "^6.0.0",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/fluent-ffmpeg": "^2.1.28",

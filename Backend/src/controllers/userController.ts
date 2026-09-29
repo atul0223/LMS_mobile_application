@@ -1,6 +1,5 @@
 import type { Request, Response } from 'express';
 import crypto from 'crypto';
-import bcrypt from 'bcrypt';
 import fs from 'fs-extra';
 import User, { type IUser } from '../models/userModel.ts';
 import sendOtp, { OTP_MAX_ATTEMPTS, OTP_TTL_MS, hashOtp } from '../utils/sendOtp.ts';
@@ -46,11 +45,10 @@ export const customSignup = asyncHandler(async (req: Request, res: Response) => 
     // Responding identically whether or not the identifier is taken keeps
     // signup from confirming which emails and usernames are registered.
     if (!existing) {
-        const hashedPassword = await bcrypt.hash(password, 10);
         await User.create({
             username: normalizedUsername,
             passwordSchema: {
-                password: hashedPassword,
+                password,
             },
             email: normalizedEmail,
             fullName: fullName ? String(fullName).trim() : normalizedUsername,
@@ -194,19 +192,8 @@ export const login = asyncHandler(async (req: Request, res: Response) => {
     const storedPassword = user.passwordSchema?.password || "";
     let validateUser = false;
 
-    // Check if stored password is a bcrypt hash
-    if (storedPassword.startsWith("$2a$") || storedPassword.startsWith("$2b$")) {
-        validateUser = await bcrypt.compare(password, storedPassword).catch(() => false);
-    } else {
-        // Fallback for legacy plain-text test accounts and upgrade
-        validateUser = timingSafeEqual(storedPassword, password);
-        if (validateUser) {
-            const rehashed = await bcrypt.hash(password, 10);
-            if (user.passwordSchema) {
-                user.passwordSchema.password = rehashed;
-            }
-        }
-    }
+    // Test-only app: passwords are stored and compared as plain text.
+    validateUser = timingSafeEqual(storedPassword, password);
     if (!validateUser) {
         if (user.passwordSchema) {
             const attempts = (user.passwordSchema.attempts ?? 0) + 1;

@@ -13,6 +13,7 @@ export const uploadVideoToCloudinary = async (localFilePath: string, publicId?: 
                 // 'authenticated' keeps the asset unreachable without a valid
                 // signature, so the delivery URL alone is not entitlement.
                 type: 'authenticated',
+                chunk_size: 6000000,
                 // Automatically generate m3u8 (HLS) formats
                 eager: [
                     { streaming_profile: 'hd', format: 'm3u8' }
