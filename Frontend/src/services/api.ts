@@ -374,11 +374,17 @@ export function uploadFileWithXHR<T = any>(
       if (xhr.status >= 200 && xhr.status < 300) {
         resolve(data as T);
       } else {
-        const errorMsg =
+        let errorMsg =
           data?.error?.message ||
           data?.message ||
-          data?.error ||
-          `Upload failed with status ${xhr.status}`;
+          data?.error;
+        if (!errorMsg || typeof errorMsg !== 'string' || errorMsg.includes('<html')) {
+          if (xhr.status === 413) {
+            errorMsg = 'File size exceeds single-request limit (413 Request Entity Too Large).';
+          } else {
+            errorMsg = `Upload failed with status ${xhr.status}`;
+          }
+        }
         const err: any = new Error(errorMsg);
         err.status = xhr.status;
         err.data = data;
@@ -410,80 +416,95 @@ export async function uploadTeacherVideo(
     let localFileUri = payload.fileUri;
     const token = await getStoredToken();
 
-    // 1. Direct Cloudinary upload attempt via signed parameters
+    // Check file size on disk
+    let fileSizeBytes = 0;
     try {
-      const sigRes = await apiRequest<{
-        signature: string;
-        timestamp: number;
-        publicId: string;
-        apiKey: string;
-        cloudName: string;
-        eager: string;
-      }>(
-        `/teacher/video/signature?courseId=${encodeURIComponent(payload.courseId)}`,
-        { timeoutMs: 90000 }
-      );
-
-      if (sigRes?.signature && sigRes?.cloudName && sigRes?.apiKey) {
-        const cloudinaryUploadUrl = `https://api.cloudinary.com/v1_1/${sigRes.cloudName}/video/upload`;
-        const cldFormData = new FormData();
-
-        if (Platform.OS === 'web' && payload.file) {
-          cldFormData.append('file', payload.file);
-        } else {
-          cldFormData.append('file', {
-            uri: localFileUri,
-            name: payload.fileName || 'lesson.mp4',
-            type: payload.mimeType || 'video/mp4',
-          } as any);
-        }
-
-        cldFormData.append('api_key', sigRes.apiKey);
-        cldFormData.append('timestamp', String(sigRes.timestamp));
-        cldFormData.append('signature', sigRes.signature);
-        cldFormData.append('public_id', sigRes.publicId);
-        cldFormData.append('type', 'authenticated');
-        cldFormData.append('eager', sigRes.eager);
-        cldFormData.append('eager_async', 'true');
-
-        // Streaming upload directly to Cloudinary without timeout
-        const cldData = await uploadFileWithXHR<any>(
-          cloudinaryUploadUrl,
-          cldFormData,
-          onProgress,
-          undefined,
-          0 // 0 = no timeout!
-        );
-
-        // Record the uploaded video metadata in MongoDB
-        return await apiRequest<{ success: boolean; message: string; data: any }>(
-          '/teacher/video/record',
-          {
-            method: 'POST',
-            body: JSON.stringify({
-              title: payload.title,
-              description: payload.description || '',
-              courseId: payload.courseId,
-              orderInCourse: payload.orderInCourse,
-              publicId: cldData.public_id || sigRes.publicId,
-              durationSeconds: cldData.duration || 0,
-              fileSizeBytes: cldData.bytes || 0,
-            }),
-            timeoutMs: 90000,
-          }
-        );
+      const fileInfo = await FileSystem.getInfoAsync(localFileUri);
+      if (fileInfo.exists && (fileInfo as any).size) {
+        fileSizeBytes = (fileInfo as any).size;
       }
-    } catch (directErr: any) {
-      console.warn('Direct Cloudinary upload failed or bypassed:', directErr?.message);
-      if (
-        directErr?.message?.includes('exceeds maximum allowed size') ||
-        directErr?.message?.includes('Unsupported video format')
-      ) {
-        throw directErr;
+    } catch {
+      // ignore
+    }
+
+    // 1. Direct Cloudinary upload for files <= 95MB (Cloudinary NGINX gateway returns 413 for single requests > 100MB)
+    const canAttemptDirectUpload = fileSizeBytes === 0 || fileSizeBytes <= 95 * 1024 * 1024;
+
+    if (canAttemptDirectUpload) {
+      try {
+        const sigRes = await apiRequest<{
+          signature: string;
+          timestamp: number;
+          publicId: string;
+          apiKey: string;
+          cloudName: string;
+          eager: string;
+        }>(
+          `/teacher/video/signature?courseId=${encodeURIComponent(payload.courseId)}`,
+          { timeoutMs: 90000 }
+        );
+
+        if (sigRes?.signature && sigRes?.cloudName && sigRes?.apiKey) {
+          const cloudinaryUploadUrl = `https://api.cloudinary.com/v1_1/${sigRes.cloudName}/video/upload`;
+          const cldFormData = new FormData();
+
+          if (Platform.OS === 'web' && payload.file) {
+            cldFormData.append('file', payload.file);
+          } else {
+            cldFormData.append('file', {
+              uri: localFileUri,
+              name: payload.fileName || 'lesson.mp4',
+              type: payload.mimeType || 'video/mp4',
+            } as any);
+          }
+
+          cldFormData.append('api_key', sigRes.apiKey);
+          cldFormData.append('timestamp', String(sigRes.timestamp));
+          cldFormData.append('signature', sigRes.signature);
+          cldFormData.append('public_id', sigRes.publicId);
+          cldFormData.append('type', 'authenticated');
+          cldFormData.append('eager', sigRes.eager);
+          cldFormData.append('eager_async', 'true');
+
+          // Streaming upload directly to Cloudinary without timeout
+          const cldData = await uploadFileWithXHR<any>(
+            cloudinaryUploadUrl,
+            cldFormData,
+            onProgress,
+            undefined,
+            0 // 0 = no timeout!
+          );
+
+          // Record the uploaded video metadata in MongoDB
+          return await apiRequest<{ success: boolean; message: string; data: any }>(
+            '/teacher/video/record',
+            {
+              method: 'POST',
+              body: JSON.stringify({
+                title: payload.title,
+                description: payload.description || '',
+                courseId: payload.courseId,
+                orderInCourse: payload.orderInCourse,
+                publicId: cldData.public_id || sigRes.publicId,
+                durationSeconds: cldData.duration || 0,
+                fileSizeBytes: cldData.bytes || fileSizeBytes || 0,
+              }),
+              timeoutMs: 90000,
+            }
+          );
+        }
+      } catch (directErr: any) {
+        console.warn('Direct Cloudinary upload failed or bypassed:', directErr?.message);
+        if (
+          directErr?.message?.includes('exceeds maximum allowed size') ||
+          directErr?.message?.includes('Unsupported video format')
+        ) {
+          throw directErr;
+        }
       }
     }
 
-    // 2. Server proxy fallback via uploadFileWithXHR (no timeout)
+    // 2. Server chunked upload pipeline via uploadFileWithXHR (no timeout, Cloudinary upload_large chunks the file)
     const baseUrl = await getBaseUrl();
     const uploadUrl = `${baseUrl}/teacher/video/upload`;
     const serverFormData = new FormData();

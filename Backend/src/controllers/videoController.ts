@@ -232,7 +232,15 @@ export const videoUpload = asyncHandler(async (req: Request, res: Response): Pro
             await destroyVideo(uploadedPublicId).catch(() => { });
         }
 
-        return res.status(500).json({ error: 'Adaptive processing or database record index creation failed.' });
+        const rawMsg = (error as any)?.message || '';
+        let errorMsg = 'Video processing or storage failed.';
+        if (rawMsg.includes('exceeds maximum allowed size') || rawMsg.includes('File size too large')) {
+            errorMsg = 'Video file exceeds Cloudinary account limit (Free tier is 100MB). Upgrade your Cloudinary plan to Plus (up to 2GB) to upload videos over 100MB, or compress the video under 100MB.';
+        } else if (rawMsg) {
+            errorMsg = rawMsg;
+        }
+
+        return res.status(500).json({ error: errorMsg });
     }
 });
 
