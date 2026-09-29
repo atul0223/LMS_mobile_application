@@ -332,42 +332,91 @@ export async function uploadTeacherVideo(
     const token = await getStoredToken();
     const uploadUrl = `${baseUrl}/teacher/video/upload`;
 
-    const uploadResult = await FileSystem.uploadAsync(uploadUrl, payload.fileUri, {
-      httpMethod: 'POST',
-      uploadType: FileSystem.FileSystemUploadType.MULTIPART,
-      fieldName: 'mediaFile',
-      mimeType: payload.mimeType || 'video/mp4',
-      parameters: {
-        title: payload.title,
-        description: payload.description || '',
-        courseId: payload.courseId,
-        orderInCourse: String(payload.orderInCourse),
-      },
-      headers: {
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        Accept: 'application/json',
-      },
-    });
+    const appCacheDir = FileSystem.cacheDirectory || FileSystem.documentDirectory;
+    let localFileUri = payload.fileUri;
+    let tempCopiedUri: string | null = null;
 
-    let resData: any = {};
     try {
-      resData = JSON.parse(uploadResult.body);
-    } catch {
-      resData = { message: uploadResult.body };
-    }
+      // If the file is not already in the app's sandboxed directory (e.g. content:// or outside cache),
+      // copy it into FileSystem.cacheDirectory so ExponentFileSystem has guaranteed read permission.
+      if (appCacheDir && (!localFileUri.startsWith('file://') || !localFileUri.startsWith(appCacheDir))) {
+        const sanitizedName = (payload.fileName || 'lesson.mp4').replace(/[^a-zA-Z0-9._-]/g, '_');
+        const targetUri = `${appCacheDir}upload_${Date.now()}_${sanitizedName}`;
+        try {
+          await FileSystem.copyAsync({
+            from: localFileUri,
+            to: targetUri,
+          });
+          localFileUri = targetUri;
+          tempCopiedUri = targetUri;
+        } catch (copyErr) {
+          console.warn('FileSystem.copyAsync failed, trying direct upload or fallback:', copyErr);
+        }
+      }
 
-    if (uploadResult.status < 200 || uploadResult.status >= 300) {
-      const errorMsg =
-        resData.message ||
-        resData.error ||
-        `Video upload failed with status ${uploadResult.status}`;
-      const err: any = new Error(errorMsg);
-      err.status = uploadResult.status;
-      err.data = resData;
-      throw err;
-    }
+      const uploadResult = await FileSystem.uploadAsync(uploadUrl, localFileUri, {
+        httpMethod: 'POST',
+        uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+        fieldName: 'mediaFile',
+        mimeType: payload.mimeType || 'video/mp4',
+        parameters: {
+          title: payload.title,
+          description: payload.description || '',
+          courseId: payload.courseId,
+          orderInCourse: String(payload.orderInCourse),
+        },
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          Accept: 'application/json',
+        },
+      });
 
-    return resData;
+      let resData: any = {};
+      try {
+        resData = JSON.parse(uploadResult.body);
+      } catch {
+        resData = { message: uploadResult.body };
+      }
+
+      if (uploadResult.status < 200 || uploadResult.status >= 300) {
+        const errorMsg =
+          resData.message ||
+          resData.error ||
+          `Video upload failed with status ${uploadResult.status}`;
+        const err: any = new Error(errorMsg);
+        err.status = uploadResult.status;
+        err.data = resData;
+        throw err;
+      }
+
+      return resData;
+    } catch (uploadErr: any) {
+      console.warn('Native FileSystem.uploadAsync encountered error, attempting Blob fallback:', uploadErr?.message);
+      try {
+        const blobRes = await fetch(payload.fileUri);
+        const blob = await blobRes.blob();
+        const fallbackFormData = new FormData();
+        fallbackFormData.append('title', payload.title);
+        if (payload.description) fallbackFormData.append('description', payload.description);
+        fallbackFormData.append('courseId', payload.courseId);
+        fallbackFormData.append('orderInCourse', String(payload.orderInCourse));
+        fallbackFormData.append('mediaFile', blob, payload.fileName || 'lesson.mp4');
+
+        return await apiRequest<{ success: boolean; message: string; data: any }>(
+          '/teacher/video/upload',
+          {
+            method: 'POST',
+            body: fallbackFormData,
+          }
+        );
+      } catch (fallbackErr: any) {
+        throw new Error(uploadErr?.message || fallbackErr?.message || 'Video upload failed');
+      }
+    } finally {
+      if (tempCopiedUri) {
+        await FileSystem.deleteAsync(tempCopiedUri, { idempotent: true }).catch(() => {});
+      }
+    }
   }
 
   // Web or FormData fallback

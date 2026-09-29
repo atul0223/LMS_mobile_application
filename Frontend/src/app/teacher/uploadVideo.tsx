@@ -60,7 +60,7 @@ export default function UploadVideoScreen() {
       setError(null);
       const res = await DocumentPicker.getDocumentAsync({
         type: ["video/*"],
-        copyToCacheDirectory: true,
+        copyToCacheDirectory: false,
       });
 
       if (!res.canceled && res.assets && res.assets.length > 0) {
