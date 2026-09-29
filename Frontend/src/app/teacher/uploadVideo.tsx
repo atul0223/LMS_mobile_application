@@ -117,10 +117,14 @@ export default function UploadVideoScreen() {
         file: (selectedFile as any).file,
       });
 
+      const targetCourse = courses.find((c) => c._id === selectedCourseId);
       showToast(res.message || "Video processed & uploaded successfully! 🎬", "success");
       router.replace({
         pathname: "/detailspage",
-        params: { courseId: selectedCourseId },
+        params: {
+          courseId: selectedCourseId,
+          ...(targetCourse ? { courseData: JSON.stringify(targetCourse) } : {}),
+        },
       });
     } catch (err: any) {
       console.error("Video upload error:", err);

@@ -325,15 +325,19 @@ export async function deleteCourse(
   });
 }
 
+export async function getCourseById(
+  courseId: string
+): Promise<{ message: string; course: Course }> {
+  return apiRequest<{ message: string; course: Course }>(
+    `/student/courses/${courseId}`
+  );
+}
+
 export async function uploadTeacherVideo(
   payload: FormData | VideoUploadPayload
 ): Promise<{ success: boolean; message: string; data: any }> {
-  // On native platforms (iOS/Android), use FileSystem.uploadAsync for high-performance streaming multipart upload
+  // On native platforms (iOS/Android), attempt direct Cloudinary upload first via signature to bypass Render proxy timeouts
   if (Platform.OS !== 'web' && !(payload instanceof FormData) && payload.fileUri) {
-    const baseUrl = await getBaseUrl();
-    const token = await getStoredToken();
-    const uploadUrl = `${baseUrl}/teacher/video/upload`;
-
     const appCacheDir = FileSystem.cacheDirectory || FileSystem.documentDirectory;
     let localFileUri = payload.fileUri;
     let tempCopiedUri: string | null = null;
@@ -352,9 +356,76 @@ export async function uploadTeacherVideo(
           localFileUri = targetUri;
           tempCopiedUri = targetUri;
         } catch (copyErr) {
-          console.warn('FileSystem.copyAsync failed, trying direct upload or fallback:', copyErr);
+          console.warn('FileSystem.copyAsync failed, using original uri:', copyErr);
         }
       }
+
+      // 1. Direct Cloudinary upload attempt via signed parameters
+      try {
+        const sigRes = await apiRequest<{
+          signature: string;
+          timestamp: number;
+          publicId: string;
+          apiKey: string;
+          cloudName: string;
+          eager: string;
+        }>(`/teacher/video/signature?courseId=${encodeURIComponent(payload.courseId)}`);
+
+        if (sigRes?.signature && sigRes?.cloudName && sigRes?.apiKey) {
+          const cloudinaryUploadUrl = `https://api.cloudinary.com/v1_1/${sigRes.cloudName}/video/upload`;
+          const cldResult = await FileSystem.uploadAsync(cloudinaryUploadUrl, localFileUri, {
+            httpMethod: 'POST',
+            uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+            fieldName: 'file',
+            mimeType: payload.mimeType || 'video/mp4',
+            parameters: {
+              api_key: sigRes.apiKey,
+              timestamp: String(sigRes.timestamp),
+              signature: sigRes.signature,
+              public_id: sigRes.publicId,
+              type: 'authenticated',
+              eager: sigRes.eager,
+              eager_async: 'true',
+            },
+          });
+
+          if (cldResult.status >= 200 && cldResult.status < 300) {
+            let cldData: any = {};
+            try {
+              cldData = JSON.parse(cldResult.body);
+            } catch {
+              cldData = {};
+            }
+
+            const recordResult = await apiRequest<{ success: boolean; message: string; data: any }>(
+              '/teacher/video/record',
+              {
+                method: 'POST',
+                body: JSON.stringify({
+                  title: payload.title,
+                  description: payload.description || '',
+                  courseId: payload.courseId,
+                  orderInCourse: payload.orderInCourse,
+                  publicId: cldData.public_id || sigRes.publicId,
+                  durationSeconds: cldData.duration || 0,
+                  fileSizeBytes: cldData.bytes || 0,
+                }),
+              }
+            );
+
+            return recordResult;
+          } else {
+            console.warn('Cloudinary direct upload status:', cldResult.status, cldResult.body);
+          }
+        }
+      } catch (directErr: any) {
+        console.warn('Direct Cloudinary upload attempt bypassed:', directErr?.message);
+      }
+
+      // 2. Server proxy fallback via FileSystem.uploadAsync
+      const baseUrl = await getBaseUrl();
+      const token = await getStoredToken();
+      const uploadUrl = `${baseUrl}/teacher/video/upload`;
 
       const uploadResult = await FileSystem.uploadAsync(uploadUrl, localFileUri, {
         httpMethod: 'POST',
@@ -393,16 +464,19 @@ export async function uploadTeacherVideo(
 
       return resData;
     } catch (uploadErr: any) {
-      console.warn('Native FileSystem.uploadAsync encountered error, attempting Blob fallback:', uploadErr?.message);
+      console.warn('Native upload failed, trying standard FormData fallback:', uploadErr?.message);
       try {
-        const blobRes = await fetch(payload.fileUri);
-        const blob = await blobRes.blob();
         const fallbackFormData = new FormData();
         fallbackFormData.append('title', payload.title);
         if (payload.description) fallbackFormData.append('description', payload.description);
         fallbackFormData.append('courseId', payload.courseId);
         fallbackFormData.append('orderInCourse', String(payload.orderInCourse));
-        fallbackFormData.append('mediaFile', blob, payload.fileName || 'lesson.mp4');
+        // React Native compatible file descriptor
+        fallbackFormData.append('mediaFile', {
+          uri: localFileUri,
+          name: payload.fileName || 'lesson.mp4',
+          type: payload.mimeType || 'video/mp4',
+        } as any);
 
         return await apiRequest<{ success: boolean; message: string; data: any }>(
           '/teacher/video/upload',
@@ -434,10 +508,16 @@ export async function uploadTeacherVideo(
 
     if (payload.file) {
       body.append('mediaFile', payload.file);
-    } else {
+    } else if (Platform.OS === 'web') {
       const blobRes = await fetch(payload.fileUri);
       const blob = await blobRes.blob();
       body.append('mediaFile', blob, payload.fileName || 'lesson.mp4');
+    } else {
+      body.append('mediaFile', {
+        uri: payload.fileUri,
+        name: payload.fileName || 'lesson.mp4',
+        type: payload.mimeType || 'video/mp4',
+      } as any);
     }
   }
 

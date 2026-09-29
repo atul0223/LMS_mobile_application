@@ -17,6 +17,7 @@ import StudentSVG from "../../../assets/images/student.svg";
 import { useAuth } from "../../context/AuthContext";
 import { useToast } from "../../components/Toast";
 import {
+  getCourseById,
   getCourseVideos,
   purchaseCourse,
   searchCourses,
@@ -56,14 +57,29 @@ export default function DetailsPage() {
 
     try {
       if (!course) {
-        const searchRes = await searchCourses({ limit: 50 });
-        const found = searchRes.courses?.find((c) => c._id === courseId);
-        if (found) {
-          setCourse(found);
-          setIsEnrolled(!!found.isEnrolled);
+        try {
+          const res = await getCourseById(courseId);
+          if (res?.course) {
+            setCourse(res.course);
+            setIsEnrolled(!!res.course.isEnrolled);
+          }
+        } catch {
+          const searchRes = await searchCourses({ limit: 50 }).catch(() => null);
+          const found = searchRes?.courses?.find((c) => c._id === courseId);
+          if (found) {
+            setCourse(found);
+            setIsEnrolled(!!found.isEnrolled);
+          }
         }
       } else {
+        const isOwner =
+          user &&
+          ((typeof course.owner === "string" && course.owner === user._id) ||
+            (typeof course.owner === "object" &&
+              course.owner !== null &&
+              course.owner._id === user._id));
         const enrolled =
+          isOwner ||
           course.isEnrolled ||
           (user?.enrolledCources || []).some((id) => id.toString() === courseId);
         setIsEnrolled(!!enrolled);
