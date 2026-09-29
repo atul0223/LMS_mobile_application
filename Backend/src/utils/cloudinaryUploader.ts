@@ -86,3 +86,25 @@ export const destroyVideo = async (publicId: string): Promise<void> => {
         type: 'authenticated'
     });
 };
+
+export const uploadImageToCloudinary = async (localFilePath: string, folder: string = "profile_pictures"): Promise<any> => {
+    return new Promise((resolve, reject) => {
+        cloudinary.uploader.upload(
+            localFilePath,
+            {
+                folder,
+                resource_type: 'image',
+                transformation: [
+                    { width: 500, height: 500, crop: 'fill', gravity: 'face' }
+                ]
+            },
+            (error, result) => {
+                if (error) {
+                    reject(error);
+                } else {
+                    resolve(result);
+                }
+            }
+        );
+    });
+};

@@ -1,10 +1,12 @@
 import type { Request, Response } from 'express';
 import crypto from 'crypto';
 import bcrypt from 'bcrypt';
-import User from '../models/userModel.ts'
+import fs from 'fs-extra';
+import User, { type IUser } from '../models/userModel.ts';
 import sendOtp, { OTP_MAX_ATTEMPTS, OTP_TTL_MS, hashOtp } from '../utils/sendOtp.ts';
 import generateJWT from '../utils/jwtokengenerator.ts';
 import asyncHandler from '../utils/asyncHandler.ts';
+import { uploadImageToCloudinary } from '../utils/cloudinaryUploader.ts';
 
 /** Failed password attempts tolerated before the account is locked. */
 const MAX_PASSWORD_ATTEMPTS = 5;
@@ -249,5 +251,81 @@ export const login = asyncHandler(async (req: Request, res: Response) => {
     return res.status(200).json({
         message: "Successfully logged in",
         accessToken,
+    });
+});
+
+export const updateProfilePic = asyncHandler(async (req: Request, res: Response) => {
+    if (!req.file) {
+        return res.status(400).json({ error: "Please submit an image file" });
+    }
+    const user = req.user;
+    if (!user) {
+        await fs.remove(req.file.path).catch(() => {});
+        return res.status(401).json({ error: "Unauthorized request" });
+    }
+
+    try {
+        const uploadResult = await uploadImageToCloudinary(req.file.path, "profile_pictures");
+        await fs.remove(req.file.path).catch(() => {});
+
+        const updatedUser = await User.findByIdAndUpdate(
+            user._id,
+            { profilePic: uploadResult.secure_url },
+            { returnDocument: 'after' }
+        ).select("-passwordSchema -otp");
+
+        return res.status(200).json({
+            message: "Profile picture updated successfully! ✨",
+            profilePic: uploadResult.secure_url,
+            user: updatedUser,
+        });
+    } catch (err: any) {
+        await fs.remove(req.file.path).catch(() => {});
+        console.error("Cloudinary profile pic upload error:", err);
+        return res.status(500).json({ error: err.message || "Failed to upload image" });
+    }
+});
+
+export const updateProfile = asyncHandler(async (req: Request, res: Response) => {
+    const user = req.user;
+    if (!user) {
+        return res.status(401).json({ error: "Unauthorized request" });
+    }
+
+    const { fullName, username } = req.body;
+    const updates: Partial<IUser> = {};
+
+    if (fullName !== undefined) {
+        if (typeof fullName !== "string") {
+            return res.status(400).json({ error: "Full name must be a string" });
+        }
+        updates.fullName = fullName.trim();
+    }
+
+    if (username !== undefined) {
+        if (typeof username !== "string" || !username.trim()) {
+            return res.status(400).json({ error: "Username cannot be empty" });
+        }
+        const cleanUsername = username.trim();
+        // Check if username is already taken by another user
+        const existing = await User.findOne({
+            username: cleanUsername,
+            _id: { $ne: user._id },
+        });
+        if (existing) {
+            return res.status(409).json({ error: "Username is already taken" });
+        }
+        updates.username = cleanUsername;
+    }
+
+    const updatedUser = await User.findByIdAndUpdate(
+        user._id,
+        { $set: updates },
+        { returnDocument: 'after' }
+    ).select("-passwordSchema -otp");
+
+    return res.status(200).json({
+        message: "Profile updated successfully! ✅",
+        user: updatedUser,
     });
 });
