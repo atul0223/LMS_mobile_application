@@ -174,6 +174,8 @@ export const videoUpload = asyncHandler(async (req: Request, res: Response): Pro
     const tempInputFile = req.file.path;
     const videoId = crypto.randomUUID();
     let uploadedPublicId: string | null = null;
+    let finalInputFile = tempInputFile;
+    const compressedFilePath = `${tempInputFile}-compressed.mp4`;
 
     try {
         // 1. Calculate duration and size from the raw uploaded disk asset (with non-blocking timeout)
@@ -181,25 +183,45 @@ export const videoUpload = asyncHandler(async (req: Request, res: Response): Pro
         try {
             rawDurationSeconds = await Promise.race([
                 getVideoDuration(tempInputFile),
-                new Promise<number>((_, reject) => setTimeout(() => reject(new Error('timeout')), 2500))
+                new Promise<number>((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000))
             ]);
         } catch {
             // Local ffprobe not available or slow; Cloudinary will provide duration
         }
 
         const fileSizeBytes = req.file.size;
-        const finalInputFile = tempInputFile;
+        let actualSizeBytes = fileSizeBytes;
+        const maxSizeBytes = 95 * 1024 * 1024; // 95 MB threshold to fit under Cloudinary's 100MB free tier
+
+        // If file exceeds 95MB, compress it down to under 95MB so Cloudinary free tier accepts it
+        if (fileSizeBytes > maxSizeBytes) {
+            console.log(`Video size (${(fileSizeBytes / (1024 * 1024)).toFixed(2)} MB) exceeds 95MB limit. Compressing to fit Cloudinary free tier...`);
+            try {
+                const durationForCalc = rawDurationSeconds > 0 ? rawDurationSeconds : 600;
+                await compressVideo(tempInputFile, compressedFilePath, durationForCalc, 92);
+
+                const compStat = await fs.stat(compressedFilePath).catch(() => null);
+                if (compStat && compStat.size > 0) {
+                    finalInputFile = compressedFilePath;
+                    actualSizeBytes = compStat.size;
+                    console.log(`Video compressed successfully to ${(actualSizeBytes / (1024 * 1024)).toFixed(2)} MB`);
+                }
+            } catch (compErr) {
+                console.warn('Compression skipped or failed, uploading original file:', compErr);
+                finalInputFile = tempInputFile;
+            }
+        }
 
         // 2. Upload video directly to Cloudinary (which handles HLS eager transformation)
         const result = await uploadVideoToCloudinary(finalInputFile, videoId);
         uploadedPublicId = result.public_id;
 
         // 3. Scrub temporary disk fingerprints instantly
-        await cleanup(finalInputFile);
+        await cleanup(tempInputFile, compressedFilePath);
 
         const durationSeconds = rawDurationSeconds || result.duration || 0;
         const durationFormatted = `${Math.floor(durationSeconds / 60)}m ${Math.round(durationSeconds % 60)}s`;
-        const sizeFormatted = `${(fileSizeBytes / (1024 * 1024)).toFixed(2)} MB`;
+        const sizeFormatted = `${(actualSizeBytes / (1024 * 1024)).toFixed(2)} MB`;
 
         // 4. Store the public_id only. Playback URLs are signed per request so
         //    access is re-checked rather than baked into a stored link.

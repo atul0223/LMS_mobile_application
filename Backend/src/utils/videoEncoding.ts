@@ -16,30 +16,38 @@ export const getVideoDuration = (inputPath: string): Promise<number> => {
 };
 
 /**
- * Compresses a video to ensure it fits under a target size (default 95MB)
+ * Compresses a video to ensure it fits under a target size (default 92MB to stay safely under Cloudinary's 100MB free tier limit)
  */
-export const compressVideo = async (inputPath: string, outputPath: string, durationSeconds: number, targetSizeMB: number = 95): Promise<void> => {
+export const compressVideo = async (inputPath: string, outputPath: string, durationSeconds: number, targetSizeMB: number = 92): Promise<void> => {
     return new Promise((resolve, reject) => {
+        const duration = Number.isFinite(durationSeconds) && durationSeconds > 0 ? durationSeconds : 600;
+
         // Calculate target bitrate in kbps
         // Target size in kilobits = targetSizeMB * 1024 * 8
         const targetKilobits = targetSizeMB * 1024 * 8;
         
-        // Subtract standard audio bitrate (e.g., 128 kbps) to leave room for video
-        let targetVideoBitrate = Math.floor(targetKilobits / durationSeconds) - 128;
+        // Allocate audio bitrate (64k for long videos, 96k for normal)
+        const audioBitrate = duration > 1800 ? 64 : 96;
+        let targetVideoBitrate = Math.floor(targetKilobits / duration) - audioBitrate;
         
-        if (targetVideoBitrate < 100) {
-            targetVideoBitrate = 100; // Minimum sensible bitrate to prevent absolute garbage
+        if (targetVideoBitrate < 120) {
+            targetVideoBitrate = 120; // Minimum sensible bitrate
         }
 
         ffmpeg(inputPath)
             .outputOptions([
+                '-c:v libx264',
+                '-preset ultrafast',
+                '-tune fastdecode',
                 `-b:v ${targetVideoBitrate}k`,
-                `-maxrate ${targetVideoBitrate * 1.5}k`,
+                `-maxrate ${Math.floor(targetVideoBitrate * 1.25)}k`,
                 `-bufsize ${targetVideoBitrate * 2}k`,
                 '-c:a aac',
-                '-b:a 128k',
-                // Optional: resize to 720p to help lower bitrate look better
-                '-vf scale=-2:720'
+                `-b:a ${audioBitrate}k`,
+                '-vf scale=-2:720',
+                '-pix_fmt yuv420p',
+                '-movflags +faststart',
+                '-threads 0'
             ])
             .output(outputPath)
             .on('end', () => resolve())
